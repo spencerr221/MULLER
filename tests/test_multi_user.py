@@ -1,0 +1,354 @@
+# SPDX-License-Identifier: MPL-2.0
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+#
+# Copyright (c) 2026 Xueling Lin
+
+import logging
+
+import pytest
+
+import muller
+from muller.util.exceptions import UnAuthorizationError, UnsupportedMethod
+from muller.util.sensitive_config import SensitiveConfig
+from tests.constants import TEST_MULTI_USER_PATH
+from tests.utils import official_path, official_creds
+
+logging.basicConfig(level=logging.INFO)
+
+
+def test_multi_branches(storage):
+    """ create multi branches by multi users."""
+    SensitiveConfig().uid = "A"
+    ds = muller.dataset(path=official_path(storage, TEST_MULTI_USER_PATH),
+                       creds=official_creds(storage), overwrite=True)
+    ds.create_tensor(name="test", htype="text")
+    ds.test.append("hi")
+    ds.commit()
+
+    logging.info(f'cur user is {SensitiveConfig().uid}, cur branch is {ds.branch}')
+    assert len(ds) == 1
+
+    SensitiveConfig().uid = "B"
+    ds.checkout("dev_B", create=True)
+    ds.test.append("bye")
+    ds.commit()
+
+    logging.info(f'cur user is {SensitiveConfig().uid}, cur branch is {ds.branch}')
+    assert len(ds) == 2
+
+
+def test_multi_branches_2(storage):
+    """ create multi branches by muti users."""
+    ds = muller.dataset(path=official_path(storage, TEST_MULTI_USER_PATH),
+                       creds=official_creds(storage), overwrite=True)
+    ds.checkout("dev", create=True)
+    ds.create_tensor("arr")
+    ds.arr.extend([1])
+    assert ds.has_head_changes
+    ds.commit()
+    assert not ds.has_head_changes
+    assert len(ds) == 1
+
+    SensitiveConfig().uid = "B"
+    ds.checkout("B_branch", create=True)
+    ds.arr.extend([2])
+    assert ds.has_head_changes
+    assert len(ds) == 2
+
+    SensitiveConfig().uid = "C"
+    ds.checkout("C_branch", create=True)
+    assert len(ds) == 2
+    assert not ds.has_head_changes
+
+
+def test_multi_user_modify_data(storage):
+    """ different users modify data on different branches.."""
+    # 1.1 用户A创建数据集并写入数据
+    SensitiveConfig().uid = "A"
+    ds = muller.dataset(path=official_path(storage, TEST_MULTI_USER_PATH),
+                       creds=official_creds(storage), overwrite=True)
+
+    ds.create_tensor(name="test", htype="text")
+    count = 0
+    with ds:
+        while count < 20:
+            ds.test.append("hi")
+            ds.test.append("bye")
+            count += 1
+    ds.commit()
+
+    # 1.2 用户B创建分支写入数据
+    SensitiveConfig().uid = "B"
+    ds.checkout("dev_B", create=True)
+    ds.test.append("bye")
+    ds.commit()
+
+    # 2.1 用户B操作main分支
+    ds.checkout("main")
+
+    try:
+        ds.pop([1, 8])
+        assert False, "No exception raises"
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+    ds = muller.load(path=official_path(storage, TEST_MULTI_USER_PATH))
+    try:
+        ds[0].update({"test": "hello"})
+        assert False, "No exception raises"
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+    ds = muller.load(path=official_path(storage, TEST_MULTI_USER_PATH))
+    try:
+        ds.test[0] = "heyhey"
+        assert False, "No exception raises"
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+    ds = muller.load(path=official_path(storage, TEST_MULTI_USER_PATH))
+    try:
+        ds.test.append("hi")
+        assert False, "No exception raises"
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+
+def test_filter_and_merge_data(storage):
+    """ different users modify data on different branches.."""
+    # 1.1 用户A创建数据集并写入数据
+    SensitiveConfig().uid = "A"
+    ds = muller.dataset(path=official_path(storage, TEST_MULTI_USER_PATH),
+                       creds=official_creds(storage), overwrite=True)
+
+    ds.create_tensor(name="test", htype="text")
+    count = 0
+    with ds:
+        while count < 20:
+            ds.test.append("hi")
+            ds.test.append("bye")
+            count += 1
+    ds.commit()
+
+    # 1.2 用户B创建分支写入数据
+    SensitiveConfig().uid = "B"
+    ds.checkout("dev_B", create=True)
+    ds.test.append("hello")
+    ds.test.append("world")
+    ds.commit()
+
+    # 1.2 用户C创建分支写入数据
+    SensitiveConfig().uid = "C"
+    ds.checkout("dev_C", create=True)
+    ds.test.append("good")
+    ds.test.append("morning")
+    ds.commit()
+
+    # 2.1 用户C操作dev_B分支 filter merge
+    ds.checkout("dev_B")
+    assert len(ds) == 42
+
+    # filter vectorized with index
+    ds_1 = ds.filter_vectorized([("test", "LIKE", "ye", True)])
+    assert len(ds_1) == 20
+
+    # merge
+    try:
+        ds.merge("dev_C")
+        assert False, "No exception raises"
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+    # 2.2 用户A操作main分支 merge
+    SensitiveConfig().uid = "A"
+    ds = muller.load(path=official_path(storage, TEST_MULTI_USER_PATH))
+
+    ds.merge("dev_B")
+    assert len(ds) == 42
+
+
+def test_checkout_authentication(storage):
+    """Function to test checkout authentication."""
+    SensitiveConfig().uid = "A"
+    ds = muller.dataset(path=official_path(storage, TEST_MULTI_USER_PATH),
+                       creds=official_creds(storage), overwrite=True)
+    ds.create_tensor('labels', htype='generic', dtype='int')
+    ds.labels.extend([10, 2, 30, 4, 50, 6, 70, 8, 90, 100] * 2)
+
+    SensitiveConfig().uid = "B"
+    ds.checkout("dev-B", create=True)
+    try:
+        owner_name = ds.version_state['commit_node_map']['firstdbf9474d461a19e9333c2fd19b46115348f'].commit_user_name
+    except KeyError:
+        assert False
+    assert owner_name == 'A'
+
+    ds.checkout("main", create=False)
+    try:
+        ds.labels.extend([10, 2, 30, 4, 50, 6, 70, 8, 90, 100] * 2)
+        assert False, "No exception raises"
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+
+def test_limited_authentication_on_other_branches(storage):
+    """Function to test limited_authentication_on_other_branches."""
+    SensitiveConfig().uid = "A"
+    ds = muller.dataset(path=official_path(storage, TEST_MULTI_USER_PATH),
+                       creds=official_creds(storage), overwrite=True)
+    ds.create_tensor('labels', htype='generic', dtype='int')
+    ds.labels.extend([10, 2, 30, 4, 50, 6, 70, 8, 90, 100] * 2)
+
+    SensitiveConfig().uid = "B"
+    ds.checkout("dev-B", create=True)
+    ds.labels.extend([10, 2, 30, 4, 50, 6, 70, 8, 90, 100] * 2)
+
+    SensitiveConfig().uid = "C"
+    try:
+        ds.reset()
+        assert False, "No exception raises"
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+    ds.checkout("dev-C", create=True)
+    ds.labels.extend([10, 2, 30, 4, 50, 6, 70, 8, 90, 100] * 2)
+    ds.checkout("dev-B")
+
+    try:
+        ds.create_tensor('labels2', htype='generic', dtype='int')
+        assert False, "No exception raises"
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+    try:
+        ds.create_tensor_like('labels', ds["labels"])
+        assert False, "No exception raises"
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+    try:
+        ds.commit()
+        assert False, "No exception raises"
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+    try:
+        ds.extend(ds[:5])
+        assert False, "No exception raises"
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+    try:
+        ds.merge("dev-C")
+        assert False, "No exception raises"
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+    try:
+        ds.delete()
+        assert False, "No exception raises"
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+    SensitiveConfig().uid = "B"
+    try:
+        ds.delete_branch("dev-C")
+        assert False, "No exception raises"
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+    SensitiveConfig().uid = "C"
+    try:
+        ds.rechunk()
+        assert False, "No exception raises"
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+    try:
+        ds.append(ds[5])
+        assert False, "No exception raises"
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+    try:
+        ds[0].update({"labels": 3})
+        assert False, "No exception raises"
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+    try:
+        ds.delete()
+        assert False, "No exception raises"
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+    try:
+        ds.delete_tensor("labels")
+        assert False, "No exception raises"
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+    try:
+        ds.pop([0, 1])
+        assert False, "No exception raises"
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+    try:
+        ds.rename("a funny test case")
+        assert False, "No exception raises"
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+    try:
+        ds.add_data_from_file()  # 看看是否走修饰器的报错就可以了
+        assert False, "No exception raises"
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+    try:
+        ds.add_data_from_dataframes()  # 看看是否走修饰器的报错就可以了
+        assert False, "No exception raises"
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+    try:
+        ds.labels.clear()
+        assert False, "No exception raises"
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+    try:
+        ds.labels.extend([1000, 2000])
+        assert False, "No exception raises"
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+    try:
+        ds.labels.append(3000)
+        assert False, "No exception raises"
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+    try:
+        ds.labels.pop([0, 1, 2])
+        assert False, "No exception raises"
+    except UnsupportedMethod as e:
+        assert True, f"do not support directly pop from a single tensor column {e}"
+
+    try:
+        ds.labels[0] = 1
+        assert False, "No exception raises"
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+    try:
+        ds.create_index(['labels'], use_uuid=True)
+    except UnAuthorizationError as e:
+        assert True, f"uid authorization caused exception {e}"
+
+if __name__ == '__main__':
+    pytest.main(["-s", "test_multi_user.py"])

@@ -3,20 +3,20 @@
 
 set -e
 
-# 获取脚本所在目录
+# Obtain the directory of the scripts
 SCRIPT_DIR=$(dirname $(readlink -f "$0"))
-SPARSEHASH_DIR="${SCRIPT_DIR}"  # MULLER-F/muller/util/sparsehash
-PROJECT_ROOT=$(cd "${SCRIPT_DIR}/../../.." && pwd) # MULLER-F
+SPARSEHASH_DIR="${SCRIPT_DIR}"  # MULLER/muller/util/sparsehash
+PROJECT_ROOT=$(cd "${SCRIPT_DIR}/../../.." && pwd) # MULLER
 BUILD_DIR="${SPARSEHASH_DIR}/build"
 THIRDPARTY_DIR="${PROJECT_ROOT}/thirdparty"
-OUTPUT_DIR="${BUILD_DIR}"  # MULLER-F/muller/util/sparsehash/build
+OUTPUT_DIR="${BUILD_DIR}"  # MULLER/muller/util/sparsehash/build
 
-# 默认参数
+# Default args
 CPU_NUM=$(nproc 2>/dev/null || sysctl -n hw.ncpu 2>/dev/null || echo 4)
 JOB_NUM=$((CPU_NUM + 1))
 BUILD_TYPE="Release"
 
-# 显示帮助
+# Show help
 usage() {
     cat << EOF
 Usage: $0 [OPTIONS]
@@ -40,7 +40,7 @@ Examples:
 EOF
 }
 
-# 解析参数
+# Build args
 CLEAN_BUILD=0
 DEPS_ONLY=0
 SKIP_DEPS=0
@@ -73,7 +73,7 @@ while getopts "j:t:cdsh" opt; do
     esac
 done
 
-# 清理构建
+# Clean the build caches
 if [ ${CLEAN_BUILD} -eq 1 ]; then
     echo "=== Cleaning build directories ==="
     rm -rf "${BUILD_DIR}"
@@ -81,7 +81,7 @@ if [ ${CLEAN_BUILD} -eq 1 ]; then
     rm -f "${OUTPUT_DIR}"/custom_hash_map*.pyd
 fi
 
-# 构建依赖
+# Building
 if [ ${SKIP_DEPS} -eq 0 ]; then
     echo "=== Building dependencies ==="
     DEPS_SCRIPT="${THIRDPARTY_DIR}/build_deps.sh"
@@ -95,34 +95,34 @@ if [ ${SKIP_DEPS} -eq 0 ]; then
     fi
 fi
 
-# 如果只构建依赖，退出
+# If only the building of dependencies is needed, quit now.
 if [ ${DEPS_ONLY} -eq 1 ]; then
     echo "Dependencies built successfully"
     exit 0
 fi
 
-# 构建项目
+# Build the project
 echo "=== Building custom_hash_map project ==="
 echo "Build type: ${BUILD_TYPE}"
 echo "Parallel jobs: ${JOB_NUM}"
 echo "Build directory: ${BUILD_DIR}"
 echo "Output directory: ${OUTPUT_DIR}"
 
-# 创建构建目录
+# Construct the build directory
 mkdir -p "${BUILD_DIR}"
 cd "${BUILD_DIR}"
 
-# 配置
+# Configuration
 echo "Configuring CMake..."
 cmake .. \
     -DCMAKE_BUILD_TYPE=${BUILD_TYPE} \
     -DPYTHON_EXECUTABLE=$(which python3)
 
-# 构建
+# Building
 echo "Building..."
 cmake --build . --config ${BUILD_TYPE} -- -j${JOB_NUM}
 
-# 检查输出
+# Check the outputs
 echo "=== Build completed ==="
 MODULE_FILE=$(find "${BUILD_DIR}" -name "custom_hash_map*.so" -o -name "custom_hash_map*.pyd" | head -1)
 
@@ -134,10 +134,10 @@ else
     exit 1
 fi
 
-# 提示后续步骤
+# Tips for the following steps
 echo ""
 echo "Build successful! You can now use the module in Python:"
-echo "  cd ${SPARSEHASH_DIR}/../../.."  # 回到MULLER-F根目录
+echo "  cd ${SPARSEHASH_DIR}/../../.."  # Go back to the MULLER directory
 echo "  python -c \"from muller.util.sparsehash.build import custom_hash_map\""
 
 cd "${PROJECT_ROOT}"

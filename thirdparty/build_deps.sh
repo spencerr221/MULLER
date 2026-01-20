@@ -4,7 +4,7 @@
 set -e
 
 CUR_DIR=$(dirname $(readlink -f "$0"))
-THIRDPARTY_DIR="${CUR_DIR}"  # GTN-F/thirdparty
+THIRDPARTY_DIR="${CUR_DIR}"  # MULLER/thirdparty
 VENDOR_DIR="${THIRDPARTY_DIR}/vendor"
 BUILD_OUT_DIR="${VENDOR_DIR}/lib"
 DEPS_SCRIPT="${CUR_DIR}/download_opensource.sh"
