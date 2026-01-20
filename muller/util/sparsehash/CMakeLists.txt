@@ -1,17 +1,17 @@
 cmake_minimum_required(VERSION 3.4)
 project(CustomHashMapPybind)
 
-# 设置C++标准
+# Set the C++ standard
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_BUILD_TYPE Release)
 
-# 设置基础路径
+# Set the basic paths
 get_filename_component(PROJECT_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)
 set(THIRDPARTY_DIR "${PROJECT_ROOT}/thirdparty")
 set(VENDOR_DIR "${THIRDPARTY_DIR}/vendor")
 
-# 依赖路径
+# Set the dependency paths
 set(PYBIND11_INCLUDE_DIR "${VENDOR_DIR}/pybind11/include")
 set(CPPJIEBA_ROOT_DIR "${VENDOR_DIR}/cppjieba")
 set(SPARSEHASH_INCLUDE_DIR "${VENDOR_DIR}/sparsehash/install/include")
@@ -20,13 +20,13 @@ set(BOOST_LIBRARY_DIR "${VENDOR_DIR}/boost/install/lib")
 set(MURMURHASH_INCLUDE_DIR "${VENDOR_DIR}/murmurhash/murmurhash/include")
 set(JIEBA_DICT_DIR "${CPPJIEBA_ROOT_DIR}/dict/")
 
-# 定义结巴词典路径
+# Set the jiaba dictionary path
 add_definitions(-DJIEBA_DICT_DIR="${JIEBA_DICT_DIR}")
 
-# 查找Python
+# Search for Python
 find_package(Python3 3.11 EXACT REQUIRED COMPONENTS Development)
 
-# 源文件
+# The source files
 set(SOURCES
     src/value_set.cpp
     src/custom_hash_map.cpp
@@ -44,10 +44,10 @@ set(SOURCES
     ${THIRDPARTY_DIR}/MurmurHash3.cpp
 )
 
-# 创建Python模块
+# Construct the Python modules
 add_library(custom_hash_map MODULE ${SOURCES})
 
-# 设置Python模块属性
+# Set the Python module attribbutes
 set_target_properties(custom_hash_map PROPERTIES
     PREFIX ""
     SUFFIX ".so"
@@ -55,7 +55,7 @@ set_target_properties(custom_hash_map PROPERTIES
     VISIBILITY_INLINES_HIDDEN ON
 )
 
-# 包含目录
+# Include the directories
 target_include_directories(custom_hash_map PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/include
     ${THIRDPARTY_DIR}
@@ -69,12 +69,12 @@ target_include_directories(custom_hash_map PRIVATE
     ${Python3_INCLUDE_DIRS}
 )
 
-# 编译定义
+# Compile definition
 target_compile_definitions(custom_hash_map PRIVATE
     LOGGING_LEVEL=LL_WARNING
 )
 
-# 链接库
+# Link Libraries
 target_link_libraries(custom_hash_map PRIVATE
     ${BOOST_LIBRARY_DIR}/libboost_system.a
     ${Python3_LIBRARIES}
@@ -82,5 +82,5 @@ target_link_libraries(custom_hash_map PRIVATE
     stdc++fs
 )
 
-# Release优化
+# Release
 target_compile_options(custom_hash_map PRIVATE -O3 -DNDEBUG)
