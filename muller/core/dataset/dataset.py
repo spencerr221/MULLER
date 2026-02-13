@@ -65,11 +65,11 @@ from muller.util.permission.invalid_view_op import invalid_view_op
 from muller.util.permission.user_permission_check import user_permission_check
 from muller.util.remove_cache import get_base_storage
 from muller.util.spinner import spinner
-from muller.util.version_control import load_meta, load_statistics, save_statistics
-from muller.util.version_control import load_version_info
-from muller.util.version_control import (rebuild_version_info,
+from muller.core.version_control.core_functions import load_meta, load_statistics, save_statistics
+from muller.core.version_control.core_functions import load_version_info
+from muller.core.version_control.core_functions import (rebuild_version_info,
                                         current_commit_has_change)
-from muller.util.version_control import (save_version_info,
+from muller.core.version_control.core_functions import (save_version_info,
                                         save_commit_info,
                                         get_dataset_diff_at_commit)
 

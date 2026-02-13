@@ -77,7 +77,7 @@ from muller.util.keys import get_tensor_commit_diff_key
 from muller.util.keys import get_tensor_meta_key, get_chunk_id_encoder_key, get_chunk_key
 from muller.util.remove_cache import get_base_storage
 from muller.util.shape_interval import ShapeInterval
-from muller.util.version_control import get_dataset_diff_at_commit
+from muller.core.version_control.core_functions import get_dataset_diff_at_commit
 
 
 class ChunkEngine:

@@ -50,7 +50,7 @@ from muller.util.keys import (filter_name,
                              tensor_exists)
 from muller.util.keys import get_downsampled_tensor_key
 from muller.util.path import convert_pathlib_to_string_if_needed
-from muller.util.version_control import (auto_checkout)
+from muller.core.version_control.core_functions import (auto_checkout)
 
 _LOCKABLE_STORAGES = {LocalProvider}
 

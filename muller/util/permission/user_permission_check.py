@@ -96,7 +96,7 @@ def user_permission_check(func: Callable):
             
             # Try to get branch owner from metadata first, fallback to commit history
             try:
-                from muller.util.version_control import get_branch_owner
+                from muller.core.version_control.core_functions import get_branch_owner
                 branch_owner = get_branch_owner(ds, current_branch)
             except Exception:
                 branch_owner = get_target_user_name(ds, None)

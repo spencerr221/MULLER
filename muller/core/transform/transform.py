@@ -63,7 +63,7 @@ from muller.util.transform import (
     len_data_in,
     transform_summary,
 )
-from muller.util.version_control import auto_checkout
+from muller.core.version_control.core_functions import auto_checkout
 
 
 class ComputeFunction:

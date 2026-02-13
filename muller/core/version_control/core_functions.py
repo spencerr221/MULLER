@@ -123,7 +123,7 @@ def save_statistics(dataset, stats):
 
 def load_meta(dataset):
     """Loads the meta info for the version state."""
-    from ..core.tensor import Tensor
+    from ..tensor import Tensor
 
     version_state = dataset.version_state
     storage: LRUCache = dataset.storage
