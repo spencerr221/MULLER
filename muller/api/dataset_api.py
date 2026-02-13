@@ -34,7 +34,7 @@ from muller.util.path import process_dataset_path
 from muller.util.path import verify_dataset_name, convert_pathlib_to_string_if_needed
 from muller.util.permission.invalid_user_op import validate_permissions
 from muller.util.storage import get_storage_and_cache_chain
-from muller.util.version_control import (
+from muller.core.version_control.core_functions import (
     load_version_info,
     get_parent_and_reset_commit_ids,
     replace_head,

@@ -41,7 +41,7 @@ from muller.util.keys import get_tensor_meta_key, get_dataset_meta_key, get_samp
     get_chunk_id_encoder_key, get_chunk_key
 from muller.core.version_control.interface.merge_interface import merge_detect, get_node_tensors, direct_detect
 from muller.util.remove_cache import create_read_copy_dataset
-from muller.util.version_control import integrity_check, reset_and_checkout, current_commit_has_change, \
+from ..core_functions import integrity_check, reset_and_checkout, current_commit_has_change, \
     warn_node_checkout, load_meta, replace_head
 
 _LOCKABLE_STORAGES = {LocalProvider}
@@ -148,7 +148,8 @@ def protected_commit(
     ds.storage.autoflush = False
     try:
         unlock_dataset(ds)
-        muller.util.version_control.commit(
+        from ..core_functions import commit as commit_func
+        commit_func(
             ds,
             message,
             commit_hash,
@@ -407,7 +408,7 @@ def protect_checkout(
     # Skip if autoflush is False (indicates we're in a transform or other internal operation)
     skip_auto_commit = hasattr(ds.storage, 'autoflush') and not ds.storage.autoflush
     if muller.constants.AUTO_COMMIT_BEFORE_CHECKOUT and ds.has_head_changes and not skip_auto_commit:
-        from muller.util.version_control import auto_commit_before_checkout
+        from ..core_functions import auto_commit_before_checkout
         auto_commit_before_checkout(ds, address)
     
     try_flushing(ds)
@@ -424,7 +425,7 @@ def protect_checkout(
         # Save branch metadata when creating new branch
         if create:
             from muller.util.authorization import obtain_current_user
-            from muller.util.version_control import save_branch_metadata
+            from ..core_functions import save_branch_metadata
             current_user = obtain_current_user()
             save_branch_metadata(
                 ds.storage,
@@ -434,7 +435,8 @@ def protect_checkout(
             )
         
         # Perform the actual checkout
-        muller.util.version_control.checkout(ds, address, create, commit_hash, flush_version_control_info)
+        from ..core_functions import checkout as checkout_func
+        checkout_func(ds, address, create, commit_hash, flush_version_control_info)
         
         if not flush_version_control_info and create:
             ds.vc_info_updated = True
@@ -970,7 +972,8 @@ def _delete_branch(ds, name: str) -> None:
     ds.storage.autoflush = False
     try:
         unlock_dataset(ds)
-        muller.util.version_control.delete_branch(ds, name)
+        from ..core_functions import delete_branch as delete_branch_func
+        delete_branch_func(ds, name)
     finally:
         ds.set_read_only(read_only, err=True)
         ds.storage.autoflush = ds.initial_autoflush.pop()

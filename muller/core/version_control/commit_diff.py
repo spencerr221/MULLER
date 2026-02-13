@@ -16,7 +16,7 @@ from sortedcontainers import SortedSet
 
 from muller.core import LRUCache
 from muller.core.storage.muller_memory_object import MULLERMemoryObject
-from muller.util.version_control import get_dataset_diff_at_commit
+from .core_functions import get_dataset_diff_at_commit
 
 
 class CommitDiff(MULLERMemoryObject):

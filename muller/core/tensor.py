@@ -69,7 +69,7 @@ from muller.util.keys import (
 from muller.util.permission.invalid_view_op import invalid_view_op
 from muller.util.permission.user_permission_check import user_permission_check
 from muller.util.shape_interval import ShapeInterval
-from muller.util.version_control import auto_checkout
+from muller.core.version_control.core_functions import auto_checkout
 
 
 def _numpy_parallel(batch_tensor, fetch_chunks=False, idxs=None, dimension=-1, name=None,
