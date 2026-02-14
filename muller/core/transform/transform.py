@@ -32,6 +32,7 @@ from muller.core.storage.provider import StorageProvider
 from muller.core.version_control import protected_commit
 from muller.core.version_control.commit_chunk_map import CommitChunkMap
 from muller.core.version_control.commit_diff import CommitDiff
+from muller.core.version_control.functions import auto_checkout
 from muller.util.compute import get_compute_provider
 from muller.util.exceptions import AllSamplesSkippedError, TransformError, UnAuthorizationError
 from muller.util.json import HubJsonDecoder, HubJsonEncoder
@@ -63,7 +64,6 @@ from muller.util.transform import (
     len_data_in,
     transform_summary,
 )
-from muller.core.version_control.core_functions import auto_checkout
 
 
 class ComputeFunction:

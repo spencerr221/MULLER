@@ -38,6 +38,9 @@ from muller.core.storage.lru_cache import LRUCache
 from muller.core.tensor import Tensor
 from muller.core.version_control.commit_node import CommitNode
 from muller.core.version_control.dataset_diff import DatasetDiff
+from muller.core.version_control.functions import load_meta, load_statistics, save_statistics, load_version_info, \
+                                                  rebuild_version_info, current_commit_has_change, save_version_info, \
+                                                  save_commit_info, get_dataset_diff_at_commit
 from muller.core.version_control.interface.diff_interface import get_changes_and_messages
 from muller.core.view.view_entry import ViewEntry
 from muller.htype import (UNSPECIFIED)
@@ -65,13 +68,7 @@ from muller.util.permission.invalid_view_op import invalid_view_op
 from muller.util.permission.user_permission_check import user_permission_check
 from muller.util.remove_cache import get_base_storage
 from muller.util.spinner import spinner
-from muller.core.version_control.core_functions import load_meta, load_statistics, save_statistics
-from muller.core.version_control.core_functions import load_version_info
-from muller.core.version_control.core_functions import (rebuild_version_info,
-                                        current_commit_has_change)
-from muller.core.version_control.core_functions import (save_version_info,
-                                        save_commit_info,
-                                        get_dataset_diff_at_commit)
+
 
 _LOCKABLE_STORAGES = {LocalProvider}
 

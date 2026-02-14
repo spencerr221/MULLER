@@ -12,7 +12,7 @@ import threading
 import pytest
 import muller
 from muller.util.exceptions import DatasetCorruptError
-from muller.core.version_control.core_functions import integrity_check
+from muller.core.version_control.functions import integrity_check
 from tests.utils import official_path, official_creds
 from tests.constants import TEST_PROCESS_INTERRUPT
 

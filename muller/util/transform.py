@@ -39,7 +39,7 @@ from muller.util.exceptions import (InvalidOutputDatasetError, AllSamplesSkipped
 from muller.util.keys import get_tensor_meta_key
 from muller.util.remove_cache import get_base_storage
 from muller.util.remove_cache import get_dataset_with_zero_size_cache
-from muller.core.version_control.core_functions import auto_checkout, load_meta, load_version_info
+from muller.core.version_control.functions import auto_checkout, load_meta, load_version_info
 
 
 def check_transform_data_in(data_in, scheduler: str, overwrite: bool, batch_enable: bool = False) -> None:
