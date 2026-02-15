@@ -9,7 +9,7 @@
 from muller.core.storage.data_cache import DataCache
 
 
-class FlaskCache(DataCache):
+class PaginatedCache(DataCache):
     def get_paginated_data(self, key: str, offset: int, limit: int):
         """Get value from data LRU cache by offset and limit."""
         with self.lock:

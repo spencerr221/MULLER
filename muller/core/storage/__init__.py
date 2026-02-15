@@ -15,6 +15,7 @@ from muller.core.storage.roma import RomaProvider
 
 # New exports for moved utilities
 from muller.core.storage.data_cache import DataCache
+from muller.core.storage.paginated_cache import PaginatedCache
 from muller.core.storage.cache_chain import get_cache_chain, generate_chain
 from muller.core.storage.factory import (
     storage_provider_from_path,

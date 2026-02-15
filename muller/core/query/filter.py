@@ -26,7 +26,7 @@ from muller.constants import (
     TRANSFORM_PROGRESSBAR_UPDATE_INTERVAL,
 )
 from muller.core.query.query import DatasetQuery
-from muller.util.compute import get_compute_provider
+from muller.core.compute import get_compute_provider
 from muller.util.exceptions import FilterError
 from muller.util.hash import hash_inputs
 

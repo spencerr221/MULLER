@@ -23,6 +23,7 @@ import numpy as np
 
 import muller
 from muller.constants import DEFAULT_TRANSFORM_SAMPLE_CACHE_SIZE, DATASET_UUID_NAME
+from muller.core.compute import get_compute_provider
 from muller.core.compute.provider import get_progress_bar, ComputeProvider
 from muller.core.meta.encode.chunk_id import ChunkIdEncoder
 from muller.core.meta.encode.tile import TileEncoder
@@ -33,7 +34,6 @@ from muller.core.version_control import protected_commit
 from muller.core.version_control.commit_chunk_map import CommitChunkMap
 from muller.core.version_control.commit_diff import CommitDiff
 from muller.core.version_control.functions import auto_checkout
-from muller.util.compute import get_compute_provider
 from muller.util.exceptions import AllSamplesSkippedError, TransformError, UnAuthorizationError
 from muller.util.json import HubJsonDecoder, HubJsonEncoder
 from muller.util.keys import (
