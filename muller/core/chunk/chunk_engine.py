@@ -64,6 +64,7 @@ from muller.core.storage.provider import StorageProvider
 from muller.core.tiling.deserialize import coalesce_tiles, translate_slices, combine_chunks
 from muller.core.version_control.commit_chunk_map import CommitChunkMap
 from muller.core.version_control.commit_diff import CommitDiff
+from muller.core.version_control.functions import get_dataset_diff_at_commit
 from muller.util.casting import get_empty_text_like_sample
 from muller.util.casting import get_htype, get_dtype
 from muller.util.class_label import convert_to_hash, convert_to_idx
@@ -75,9 +76,8 @@ from muller.util.image import convert_sample, convert_img_arr
 from muller.util.keys import get_tensor_commit_chunk_map_key, get_tensor_tile_encoder_key
 from muller.util.keys import get_tensor_commit_diff_key
 from muller.util.keys import get_tensor_meta_key, get_chunk_id_encoder_key, get_chunk_key
-from muller.util.remove_cache import get_base_storage
+from muller.core.storage.cache_utils import get_base_storage
 from muller.util.shape_interval import ShapeInterval
-from muller.core.version_control.core_functions import get_dataset_diff_at_commit
 
 
 class ChunkEngine:

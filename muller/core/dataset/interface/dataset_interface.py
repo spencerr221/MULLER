@@ -24,6 +24,7 @@ import muller
 from muller.constants import (SAMPLE_INFO_TENSOR_MAX_CHUNK_SIZE, CREATE_TENSOR_HIDDEN_UUID, DATASET_UUID_NAME)
 from muller.core.dataset import Dataset
 from muller.core.version_control.fast_forwarding import ffw_dataset_meta
+from muller.core.version_control.functions import auto_checkout
 from muller.core.lock import unlock_dataset
 from muller.core.meta.dataset_meta import DatasetMeta
 from muller.core.storage.local import LocalProvider
@@ -50,7 +51,7 @@ from muller.util.keys import (filter_name,
                              tensor_exists)
 from muller.util.keys import get_downsampled_tensor_key
 from muller.util.path import convert_pathlib_to_string_if_needed
-from muller.core.version_control.core_functions import (auto_checkout)
+
 
 _LOCKABLE_STORAGES = {LocalProvider}
 

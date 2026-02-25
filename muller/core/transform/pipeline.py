@@ -31,15 +31,15 @@ from muller.core.index import Index
 from muller.core.meta.tensor_meta import TensorMeta
 from muller.core.storage import MemoryProvider, StorageProvider, LRUCache
 from muller.core.transform.transform_dataset import TransformDataset
-from muller.util.dataset import try_flushing
+from muller.core.dataset.operations import try_flushing
 from muller.util.exceptions import InvalidInputDataError, TransformFailure
 from muller.util.exceptions import (InvalidOutputDatasetError, AllSamplesSkippedError,
                                    TensorDoesNotExistError, InvalidTransformDataset, TensorMismatchError,
                                    TransformError, SampleAppendError)
 from muller.util.keys import get_tensor_meta_key
-from muller.util.remove_cache import get_base_storage
-from muller.util.remove_cache import get_dataset_with_zero_size_cache
-from muller.core.version_control.core_functions import auto_checkout, load_meta, load_version_info
+from muller.core.storage.cache_utils import get_base_storage
+from muller.core.storage.cache_utils import get_dataset_with_zero_size_cache
+from muller.core.version_control.functions import auto_checkout, load_meta, load_version_info
 
 
 def check_transform_data_in(data_in, scheduler: str, overwrite: bool, batch_enable: bool = False) -> None:

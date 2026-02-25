@@ -221,7 +221,7 @@ def test_branch_metadata_storage(temp_dataset_path):
     # Verify metadata can be retrieved
     SensitiveConfig().uid = 'user_b'
     ds = muller.load(path)
-    from muller.core.version_control.core_functions import get_branch_owner
+    from muller.core.version_control.functions import get_branch_owner
     owner = get_branch_owner(ds, "branch_a")
     assert owner == "user_a"
 

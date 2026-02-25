@@ -11,7 +11,7 @@ from multiprocessing import Process, Queue
 from mindspore.mindrecord import FileWriter
 
 import muller
-from muller.util.compute import get_compute_provider
+from muller.core.compute import get_compute_provider
 
 
 def create_schema(tensor_dict):

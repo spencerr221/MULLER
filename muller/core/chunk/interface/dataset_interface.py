@@ -17,7 +17,6 @@ from typing import Dict, List, Optional, Union
 
 import muller
 from muller.constants import DATASET_UUID_NAME
-from muller.util.dataset import rechunk_one_tensor
 
 
 def dataset_rechunk(
@@ -66,6 +65,8 @@ def dataset_rechunk_if_necessary(
     Returns:
         None.
     """
+    from muller.core.dataset.operations import rechunk_one_tensor
+
     if tensor_spec is None:
         tensors = [t for t in ds.tensors if not t.startswith("_")]
         avg_bps_map: Dict[str, Optional[int]] = {t: None for t in tensors}
