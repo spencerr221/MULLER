@@ -424,7 +424,7 @@ def protect_checkout(
         
         # Save branch metadata when creating new branch
         if create:
-            from muller.util.authorization import obtain_current_user
+            from muller.core.auth.authorization import obtain_current_user
             from ..functions import save_branch_metadata
             current_user = obtain_current_user()
             save_branch_metadata(

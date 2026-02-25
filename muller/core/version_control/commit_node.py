@@ -12,7 +12,7 @@
 
 from datetime import datetime
 from typing import List, Optional
-from muller.util.authorization import obtain_current_user
+from muller.core.auth.authorization import obtain_current_user
 
 
 class CommitNode:

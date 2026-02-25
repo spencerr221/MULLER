@@ -29,7 +29,7 @@ from muller.core.storage.lru_cache import LRUCache
 from muller.core.version_control.commit_chunk_map import CommitChunkMap
 from muller.core.version_control.commit_node import CommitNode
 from muller.core.version_control.dataset_diff import DatasetDiff
-from muller.util.authorization import obtain_current_user
+from muller.core.auth.authorization import obtain_current_user
 from muller.util.exceptions import (CheckoutError,
                                    CommitError,
                                    DatasetCorruptError, VersionControlError)

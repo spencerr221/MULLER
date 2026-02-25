@@ -52,7 +52,7 @@ from muller.util.exceptions import (
     TensorAlreadyExistsError,
     UnsupportedCompressionError, MultiProcessUnsupportedError, UnsupportedMethod, MetaNotFound
 )
-from muller.util.htype import parse_complex_htype
+from muller.core.types.htype import parse_complex_htype
 from muller.util.iteration_warning import check_if_iteration
 from muller.core.storage_keys import (
     get_chunk_id_encoder_key,
@@ -66,8 +66,8 @@ from muller.core.storage_keys import (
     get_sample_info_tensor_key,
     get_sample_shape_tensor_key,
 )
-from muller.util.permission.invalid_view_op import invalid_view_op
-from muller.util.permission.user_permission_check import user_permission_check
+from muller.core.auth.permission.invalid_view_op import invalid_view_op
+from muller.core.auth.permission.user_permission_check import user_permission_check
 from muller.util.shape_interval import ShapeInterval
 
 

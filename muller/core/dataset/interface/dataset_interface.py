@@ -43,7 +43,7 @@ from muller.util.exceptions import (RenameError,
                                    SampleExtendError,
                                    DatasetTooLargeToDelete)
 from muller.util.muller_keywords import is_muller_keyword
-from muller.util.htype import parse_complex_htype
+from muller.core.types.htype import parse_complex_htype
 from muller.core.storage_keys import (filter_name,
                              get_sample_shape_tensor_key,
                              get_sample_id_tensor_key,

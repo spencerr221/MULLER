@@ -53,7 +53,7 @@ from muller.core.version_control.functions import (
 from muller.core.version_control.interface.diff_interface import get_changes_and_messages
 from muller.core.view.view_entry import ViewEntry
 from muller.htype import UNSPECIFIED
-from muller.util.authorization import obtain_current_user
+from muller.core.auth.authorization import obtain_current_user
 from muller.util.exceptions import (LockedException,
                                    ReadOnlyModeError,
                                    CheckoutError,
@@ -71,9 +71,9 @@ from muller.util.iteration_warning import (suppress_iteration_warning,
 from muller.core.storage_keys import dataset_exists, get_dataset_diff_key
 from muller.core.storage_keys import (get_dataset_meta_key)
 from muller.util.path import get_path_from_storage, convert_pathlib_to_string_if_needed
-from muller.util.permission.index_permission_check import index_permission_check
-from muller.util.permission.invalid_view_op import invalid_view_op
-from muller.util.permission.user_permission_check import user_permission_check
+from muller.core.auth.permission.index_permission_check import index_permission_check
+from muller.core.auth.permission.invalid_view_op import invalid_view_op
+from muller.core.auth.permission.user_permission_check import user_permission_check
 from muller.core.storage.cache_utils import get_base_storage
 from muller.util.spinner import spinner
 
@@ -1710,7 +1710,7 @@ class Dataset:
         Raises:
             UnAuthorizationError: If current user is not the dataset creator
         """
-        from muller.util.authorization import obtain_current_user
+        from muller.core.auth.authorization import obtain_current_user
         from muller.util.exceptions import UnAuthorizationError
         from muller.client.log import logger
         
