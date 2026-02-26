@@ -22,7 +22,7 @@ from muller.core.lock import lock_dataset, unlock_dataset
 from muller.core.meta.dataset_meta import DatasetMeta
 from muller.core.meta.encode.chunk_id import ChunkIdEncoder
 from muller.core.meta.tensor_meta import TensorMeta
-from muller.core.serialize import deserialize_chunkids, deserialize_chunk
+from muller.core.chunk.serialize import deserialize_chunkids, deserialize_chunk
 from muller.core.storage.local import LocalProvider
 from muller.core.version_control.commit_node import CommitNode
 from muller.core.version_control.interface.diff_interface import (sanitize_commit, get_lowest_common_ancestor,

@@ -56,7 +56,7 @@ from muller.core.meta.encode.tile import TileEncoder
 from muller.core.meta.tensor_meta import TensorMeta, _validate_required_htype_overwrites
 from muller.core.partial_reader import PartialReader
 from muller.core.sample import Sample
-from muller.core.serialize import HEADER_SIZE_BYTES, deserialize_chunkids
+from muller.core.chunk.serialize import HEADER_SIZE_BYTES, deserialize_chunkids
 from muller.core.storage import MemoryProvider, RomaProvider
 from muller.core.storage.cache_utils import get_base_storage
 from muller.core.storage.info import Info

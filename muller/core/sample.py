@@ -382,7 +382,7 @@ class Sample:
         compression = self.compression
         if compression is None and self._buffer is not None:
             if self.htype in ["list", "text", "json"]:
-                from muller.core.serialize import bytes_to_text
+                from muller.core.chunk.serialize import bytes_to_text
                 buffer = bytes(self._buffer)
                 self._array = bytes_to_text(buffer, self.htype)
             else:

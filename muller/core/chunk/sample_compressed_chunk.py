@@ -15,7 +15,7 @@ from typing import List, Optional, Tuple
 from muller.core.chunk.base_chunk import BaseChunk, InputSample, catch_chunk_read_error
 from muller.core.compression import decompress_bytes, decompress_array
 from muller.core.sample import Sample  # type: ignore
-from muller.core.serialize import (
+from muller.core.chunk.serialize import (
     bytes_to_text,
     check_sample_shape,
 )
