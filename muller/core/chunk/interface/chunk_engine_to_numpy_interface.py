@@ -212,11 +212,19 @@ def _detect_access_pattern(chunk_engine, index: Index, index_list=None):
 
 
 def _validate_batch_samples(chunk_engine, fetch_chunks):
+    """Validate if batch sample optimization can be applied.
+
+    The optimization methods (get_samples_continuous, get_samples_full, get_samples_batch_random_access)
+    only work with UncompressedChunk because they directly access raw bytes via chunk.data_bytes.
+    Compressed chunks require decompression before accessing individual samples.
+    """
     from muller.core.storage import MemoryProvider  # Sherry: import recursion risk
     return (
                 fetch_chunks
                 and not chunk_engine.is_video
                 and not isinstance(chunk_engine.base_storage, MemoryProvider)
+                and chunk_engine.chunk_compression is None  # Only uncompressed chunks
+                and chunk_engine.sample_compression is None  # Only uncompressed chunks
         )
 
 
