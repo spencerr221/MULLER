@@ -129,12 +129,20 @@ def protected_numpy(
 
         # Sherry: Here we start to get the samples in a batch mode
         if _validate_batch_samples(chunk_engine, fetch_chunks):
+            # Auto-detect access pattern if not explicitly specified
+            if not continuous and not full and not batch_random_access:
+                access_pattern = _detect_access_pattern(chunk_engine, index, index_list)
+                continuous = access_pattern['continuous']
+                full = access_pattern['full']
+                batch_random_access = access_pattern['batch_random_access']
+
             if continuous and chunk_engine.is_fixed_shape:
                 samples = get_samples_continuous(chunk_engine, index, max_workers)
             elif full and chunk_engine.is_fixed_shape:
                 samples = get_samples_full(chunk_engine, None, max_workers)
             elif batch_random_access:
                 samples = get_samples_batch_random_access(chunk_engine,
+                                                          index=index,
                                                           index_list=index_list,
                                                           max_workers=max_workers,
                                                           parallel=parallel)
@@ -158,6 +166,49 @@ def protected_numpy(
         import pyarrow as pa
         return pa.array(samples)
     return np.array(samples)
+
+
+def _detect_access_pattern(chunk_engine, index: Index, index_list=None):
+    """Automatically detect the optimal access pattern based on index characteristics.
+
+    Args:
+        chunk_engine: The chunk engine to use.
+        index (Index): Index applied on the tensor.
+        index_list: Optional list of indices for batch random access.
+
+    Returns:
+        Dict with keys 'continuous', 'full', 'batch_random_access' indicating which pattern to use.
+    """
+    pattern = {'continuous': False, 'full': False, 'batch_random_access': False}
+
+    # Check if we're accessing the full dataset
+    if isinstance(index.values[0].value, slice):
+        start = index.values[0].value.start or 0
+        stop = index.values[0].value.stop or chunk_engine.num_samples
+        step = index.values[0].value.step or 1
+
+        # Normalize negative indices
+        if start < 0:
+            start = chunk_engine.num_samples + start
+        if stop < 0:
+            stop = chunk_engine.num_samples + stop
+
+        # Full access: reading entire dataset
+        if start == 0 and stop == chunk_engine.num_samples and step == 1:
+            pattern['full'] = True
+            return pattern
+
+        # Continuous access: reading a continuous slice
+        if step == 1:
+            pattern['continuous'] = True
+            return pattern
+
+    # Batch random access: tuple of indices or explicit index_list
+    elif isinstance(index.values[0].value, tuple) or index_list is not None:
+        pattern['batch_random_access'] = True
+        return pattern
+
+    return pattern
 
 
 def _validate_batch_samples(chunk_engine, fetch_chunks):
@@ -299,7 +350,8 @@ def get_samples_full(
 
 
 def get_samples_batch_random_access(chunk_engine,
-                                    index_list: List,
+                                    index: Optional[Index] = None,
+                                    index_list: Optional[List] = None,
                                     max_workers: int = MAX_WORKERS_FOR_CHUNK_ENGINE,
                                     parallel: Optional[str] = None):
     """【Added by Sherry】
@@ -307,13 +359,22 @@ def get_samples_batch_random_access(chunk_engine,
 
     Args:
         chunk_engine: The chunk engine to be used.
-        index_list (List): Index applied on the tensor.
+        index (Optional[Index]): Index applied on the tensor.
+        index_list (Optional[List]): Explicit list of indices. If not provided, will be extracted from index.
         max_workers (int): max workers used in thread pool.
         parallel (Optional[str]): whether using threads for parallel computing or not.
 
     Returns:
         List of samples.
     """
+    # Extract index_list from index if not provided
+    if index_list is None:
+        if index is None:
+            raise ValueError("Either index or index_list must be provided")
+        if isinstance(index.values[0].value, tuple):
+            index_list = list(index.values[0].value)
+        else:
+            index_list = list(index.values[0].indices(chunk_engine.num_samples))
 
     load_res = _load_chunk_infos(chunk_engine, list(index_list))  # Note: this rearrange the index_list
 
