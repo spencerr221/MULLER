@@ -17,7 +17,7 @@ import numpy as np
 
 from muller.constants import CHUNK_ID_COLUMN, ENCODING_DTYPE
 from muller.core.meta.encode.base_encoder import Encoder, LAST_SEEN_INDEX_COLUMN
-from muller.core.serialize import serialize_chunkids, deserialize_chunkids
+from muller.core.chunk.serialize import serialize_chunkids, deserialize_chunkids
 from muller.core.storage.muller_memory_object import MULLERMemoryObject
 from muller.util.exceptions import (
     ChunkIdEncoderError,

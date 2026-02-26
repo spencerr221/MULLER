@@ -15,7 +15,7 @@ from typing import List, Union, Optional
 import numpy as np
 
 from muller.constants import ENCODING_DTYPE
-from muller.core.serialize import (
+from muller.core.chunk.serialize import (
     check_sample_shape,
     bytes_to_text,
 )

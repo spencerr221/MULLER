@@ -25,7 +25,7 @@ from muller.core.compression import (
 )
 from muller.core.meta.encode.shape import ShapeEncoder
 from muller.core.partial_sample import PartialSample
-from muller.core.serialize import bytes_to_text, check_sample_shape, infer_chunk_num_bytes
+from muller.core.chunk.serialize import bytes_to_text, check_sample_shape, infer_chunk_num_bytes
 from muller.core.tiling.sample_tiles import SampleTiles
 from muller.core.types.casting import intelligent_cast
 from muller.util.exceptions import TensorDtypeMismatchError

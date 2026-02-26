@@ -28,13 +28,16 @@ from muller.core.meta.tensor_meta import TensorMeta
 from muller.core.partial_reader import PartialReader
 from muller.core.partial_sample import PartialSample
 from muller.core.sample import Sample  # type: ignore
-from muller.core.serialize import deserialize_chunk, serialize_text_sample_object
-from muller.core.serialize import (serialize_numpy_and_base_types,
-                                  serialize_text,
-                                  serialize_tensor,
-                                  serialize_partial_sample_object,
-                                  serialize_sample_object,
-                                  serialize_chunk)
+from muller.core.chunk.serialize import (
+    deserialize_chunk,
+    serialize_chunk,
+    serialize_numpy_and_base_types,
+    serialize_partial_sample_object,
+    serialize_sample_object,
+    serialize_tensor,
+    serialize_text,
+    serialize_text_sample_object,
+)
 from muller.core.storage.muller_memory_object import MULLERMemoryObject
 from muller.core.tiling.sample_tiles import SampleTiles
 from muller.util.exceptions import EmptyTensorError, ReadSampleFromChunkError
