@@ -3,12 +3,22 @@
 # This Source Code Form is subject to the terms of the Mozilla Public
 # License, v. 2.0. If a copy of the MPL was not distributed with this
 # file, You can obtain one at https://mozilla.org/MPL/2.0/.
-#
-# Copyright (c) 2026 Xueling Lin
-from muller.util.sensitive_config import SensitiveConfig
 
+"""
+Deprecated: This module has been moved to muller.core.auth.authorization
 
-def obtain_current_user():
-    """Obtain the user info of the current user."""
-    user_info = SensitiveConfig().uid
-    return user_info
+This module is kept for backward compatibility and will be removed in a future version.
+Please update your imports to use muller.core.auth.authorization instead.
+"""
+
+import warnings
+
+# Re-export all functions from the new location
+from muller.core.auth.authorization import *  # noqa: F401, F403
+
+warnings.warn(
+    "muller.util.authorization is deprecated and will be removed in a future version. "
+    "Please use muller.core.auth.authorization instead.",
+    DeprecationWarning,
+    stacklevel=2
+)
