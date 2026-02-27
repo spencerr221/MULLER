@@ -345,8 +345,8 @@ def get_samples_continuous(
                                                                                                   last_chunk_index))))
     final_results = np.concatenate(results)
     # Convert to list of numpy arrays to match get_samples() return type
-    # Each element should be a numpy array
-    return [np.array([x]) for x in final_results]
+    # Each element is a sample with its original shape
+    return [final_results[i] for i in range(len(final_results))]
 
 
 def get_samples_full(
@@ -379,8 +379,8 @@ def get_samples_full(
                 results.append(executor.submit(_get_chunk_numpy_full, chunk_engine, chunk_name))
     final_results = np.concatenate([result.result() for result in results])
     # Convert to list of numpy arrays to match get_samples() return type
-    # Each element should be a numpy array
-    return [np.array([x]) for x in final_results]
+    # Each element is a sample with its original shape
+    return [final_results[i] for i in range(len(final_results))]
 
 
 def get_samples_batch_random_access(chunk_engine,
@@ -629,20 +629,39 @@ def _obtain_cache_range(chunk_engine, enc, global_sample_index, as_arrow):
 
 def _get_chunk_numpy_continuous(chunk_engine, chunk_name, start_idx, end_idx):
     sample_dtype = chunk_engine.tensor_meta.dtype
-    sample_size = np.array([], dtype=sample_dtype).itemsize
+    sample_shape = tuple(chunk_engine.tensor_meta.max_shape)
+    sample_size = np.prod(sample_shape, dtype=int) * np.dtype(sample_dtype).itemsize
+
     chunk_key = get_chunk_key(chunk_engine.key, chunk_name)
     chunk = chunk_engine.get_chunk(chunk_key)
-    np_bytes = chunk.data_bytes[start_idx*sample_size: end_idx*sample_size + sample_size]
-    final_results = np.frombuffer(np_bytes, dtype=sample_dtype)
+    np_bytes = chunk.data_bytes[start_idx*sample_size: (end_idx+1)*sample_size]
+
+    # Calculate number of samples
+    num_samples = end_idx - start_idx + 1
+
+    # Reshape to (num_samples,) + sample_shape
+    full_shape = (num_samples,) + sample_shape
+    final_results = np.frombuffer(np_bytes, dtype=sample_dtype).reshape(full_shape)
+
     return final_results
 
 
 def _get_chunk_numpy_full(chunk_engine, chunk_name):
     sample_dtype = chunk_engine.tensor_meta.dtype
+    sample_shape = tuple(chunk_engine.tensor_meta.max_shape)
+
     chunk_key = get_chunk_key(chunk_engine.key, chunk_name)
     chunk = chunk_engine.get_chunk(chunk_key)
     np_bytes = chunk.data_bytes
-    final_results = np.frombuffer(np_bytes, dtype=sample_dtype)
+
+    # Calculate number of samples in this chunk
+    sample_size = np.prod(sample_shape, dtype=int) * np.dtype(sample_dtype).itemsize
+    num_samples = len(np_bytes) // sample_size
+
+    # Reshape to (num_samples,) + sample_shape
+    full_shape = (num_samples,) + sample_shape
+    final_results = np.frombuffer(np_bytes, dtype=sample_dtype).reshape(full_shape)
+
     return final_results
 
 

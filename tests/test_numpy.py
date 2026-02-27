@@ -90,7 +90,7 @@ def create_uncompressed_dataset_with_dtype(storage, dtype, num_samples=100):
     elif dtype in ['int32', 'int64', 'uint32', 'uint64']:
         data = np.arange(num_samples, dtype=dtype).reshape(-1, 1)
     elif dtype == 'uint8':
-        data = (np.arange(num_samples, dtype=dtype) % 256).reshape(-1, 1)
+        data = (np.arange(num_samples) % 256).astype(dtype).reshape(-1, 1)
     elif dtype == 'bool':
         data = (np.arange(num_samples) % 2).astype(bool).reshape(-1, 1)
     else:
@@ -149,7 +149,7 @@ def generate_expected_data(dtype, num_samples):
     elif dtype in ['int32', 'int64', 'uint32', 'uint64']:
         return np.arange(num_samples, dtype=dtype).reshape(-1, 1)
     elif dtype == 'uint8':
-        return (np.arange(num_samples, dtype=dtype) % 256).reshape(-1, 1)
+        return (np.arange(num_samples) % 256).astype(dtype).reshape(-1, 1)
     elif dtype == 'bool':
         return (np.arange(num_samples) % 2).astype(bool).reshape(-1, 1)
     else:
