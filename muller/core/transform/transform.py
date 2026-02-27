@@ -382,7 +382,6 @@ class Pipeline:
                         overwrite=overwrite,
                         skip_ok=skip_ok,
                         read_only=kwargs.get("read_only_ok", False) and overwrite,
-                        cache_size=kwargs.get("cache_size", DEFAULT_TRANSFORM_SAMPLE_CACHE_SIZE),
                         pbar=pbar,
                         pqueue=pqueue,
                         ignore_errors=ignore_errors,
