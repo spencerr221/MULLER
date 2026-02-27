@@ -295,14 +295,38 @@ def get_samples_continuous(
     results = []
 
     # The first chunk
-    if chunk_engine.translate_to_local_index(idxs[0], first_chunk_index) == 0:  # Read the whole chunk
-        results.append(_get_chunk_numpy_full(chunk_engine, chunk_names[0]))
+    if first_chunk_index == last_chunk_index:
+        # All samples are in the same chunk
+        start_local_idx = chunk_engine.translate_to_local_index(idxs[0], first_chunk_index)
+        end_local_idx = chunk_engine.translate_to_local_index(idxs[-1], first_chunk_index)
+
+        # Check if we're reading the entire chunk
+        chunk_start = 0 if first_chunk_index == 0 else last_id_list[first_chunk_index - 1] + 1
+        chunk_end = last_id_list[first_chunk_index]
+
+        if start_local_idx == 0 and idxs[-1] == chunk_end:
+            # Reading the whole chunk
+            results.append(_get_chunk_numpy_full(chunk_engine, chunk_names[0]))
+        else:
+            # Reading part of the chunk
+            results.append(_get_chunk_numpy_continuous(chunk_engine,
+                                                       chunk_names[0],
+                                                       start_local_idx,
+                                                       end_local_idx))
     else:
-        results.append(_get_chunk_numpy_continuous(chunk_engine,
-                                                   chunk_names[0],
-                                                   chunk_engine.translate_to_local_index(idxs[0],
-                                                   first_chunk_index),
-                                                   int(last_id_list[first_chunk_index])))
+        # Samples span multiple chunks
+        start_local_idx = chunk_engine.translate_to_local_index(idxs[0], first_chunk_index)
+
+        if start_local_idx == 0:
+            # Read the whole first chunk
+            results.append(_get_chunk_numpy_full(chunk_engine, chunk_names[0]))
+        else:
+            # Read from start_local_idx to end of first chunk
+            end_local_idx = int(last_id_list[first_chunk_index])
+            results.append(_get_chunk_numpy_continuous(chunk_engine,
+                                                       chunk_names[0],
+                                                       start_local_idx,
+                                                       end_local_idx))
     # The chunks in the middle
     # Note: If we use ProcessPool here, it may cause file look error.
     with ThreadPoolExecutor(min(max_workers, len(chunk_names))) as executor:
@@ -320,8 +344,9 @@ def get_samples_continuous(
                                                         int(chunk_engine.translate_to_local_index(idxs[-1],
                                                                                                   last_chunk_index))))
     final_results = np.concatenate(results)
-    final_results = final_results.reshape(len(final_results), 1)
-    return final_results
+    # Convert to list of numpy arrays to match get_samples() return type
+    # Each element should be a numpy array
+    return [np.array([x]) for x in final_results]
 
 
 def get_samples_full(
@@ -353,8 +378,9 @@ def get_samples_full(
             for chunk_name in all_chunk_names:
                 results.append(executor.submit(_get_chunk_numpy_full, chunk_engine, chunk_name))
     final_results = np.concatenate([result.result() for result in results])
-    final_results = final_results.reshape(len(final_results), 1)
-    return final_results
+    # Convert to list of numpy arrays to match get_samples() return type
+    # Each element should be a numpy array
+    return [np.array([x]) for x in final_results]
 
 
 def get_samples_batch_random_access(chunk_engine,
