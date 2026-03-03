@@ -1433,14 +1433,9 @@ class Dataset(
         return muller.core.dataset.MULLERArrowDataset(self)
 
     def write_to_parquet(self, path, columns=None):
-        """Returns an arrow of the dataset."""
-        import pyarrow as pa
-        import pyarrow.parquet as pq
-        arrow_dataset = self.to_arrow()
-        arrow_table = arrow_dataset.to_table(columns)
-        writer = pa.BufferOutputStream()
-        pq.write_table(arrow_table, writer)
-        self.storage[path] = bytes(writer.getvalue())
+        """Write dataset to parquet format."""
+        from muller.core.dataset.export_data.to_parquet import write_to_parquet
+        write_to_parquet(self, path, columns)
 
     def statistics(self):
         """Get statistics info of dataset. Load from dataset_meta.json first, if empty, calculate and then save it.
@@ -1449,17 +1444,8 @@ class Dataset(
             >>> ds = muller.load("path_to_dataset")
             >>> ds.statistics()
         """
-        from muller.core.dataset.statistics.statistics import get_statistics
-        if self.has_head_changes:
-            warnings.warn(
-                "There are uncommitted changes, showing statistics from last committed version, try again after commit."
-            )
-
-        stats = load_statistics(self)
-        if not stats:
-            stats = get_statistics(self)
-            save_statistics(self, stats)
-        print(json.dumps(stats))
+        from muller.core.dataset.statistics.statistics import show_statistics
+        show_statistics(self)
 
     def to_json(
             self,
@@ -1477,11 +1463,8 @@ class Dataset(
             tensors (List of str, Optional): The tensor columns selected to be exported to the jsonl or json file.
             num_workers (int, Optional): The number of workers that can be used to dump to the path.
         """
-        if not (path.endswith("json") or path.endswith("jsonl")):
-            raise InvalidJsonFileName(path)
-        if num_workers <= 0:
-            raise InvalidNumWorkers(num_workers)
-        muller.core.dataset.to_json(self, path, tensors, num_workers)
+        from muller.core.dataset.export_data.to_json import to_json
+        to_json(self, path, tensors, num_workers)
 
     def to_mindrecord(
             self,
@@ -1508,11 +1491,9 @@ class Dataset(
                                                                        overwrite, scheduler)
 
     def size_approx(self):
-        """Estimates the size in bytes of the dataset. """
-        tensors = self.version_state["full_tensors"].values()
-        chunk_engines = [tensor.chunk_engine for tensor in tensors]
-        size = sum(c.num_chunks * c.min_chunk_size for c in chunk_engines)
-        return size
+        """Estimates the size in bytes of the dataset."""
+        from muller.core.dataset.statistics.size import size_approx
+        return size_approx(self)
 
     def get_tensors(self, include_hidden: bool = True, include_disabled=True) -> Dict[str, Tensor]:
         """All tensors belonging to this group, including those within sub groups. Always returns the sliced tensors."""

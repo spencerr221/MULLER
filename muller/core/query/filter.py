@@ -21,11 +21,11 @@ from uuid import uuid4
 import numpy as np
 
 import muller
-from muller.compute import get_compute_provider
 from muller.constants import (
     QUERY_PROGRESS_UPDATE_FREQUENCY,
     TRANSFORM_PROGRESSBAR_UPDATE_INTERVAL,
 )
+from muller.core.compute import get_compute_provider
 from muller.core.query.query import DatasetQuery
 from muller.util.exceptions import FilterError
 from muller.util.hash import hash_inputs
