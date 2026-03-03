@@ -59,8 +59,6 @@ if sys.version_info < (3, 11):
 # The api of muller tensor
 tensor = Tensor
 
-# Backward compatibility - keep old import paths working
-# Users can still use: from muller.api import DatasetAPI
 import muller.api
 
 # Deprecated: create_dataset_from_file and create_dataset_from_dataframes

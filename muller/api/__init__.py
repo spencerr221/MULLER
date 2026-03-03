@@ -26,9 +26,6 @@ from muller.api.io import read, tiled, Sample
 # Transform operations
 from muller.api.transform import compute, ComputeFunction, Pipeline
 
-# Legacy compatibility - keep DatasetAPI for backward compatibility
-from muller.api.dataset_api import DatasetAPI
-
 __all__ = [
     # Dataset operations
     'dataset',
@@ -47,6 +44,4 @@ __all__ = [
     'compute',
     'ComputeFunction',
     'Pipeline',
-    # Legacy
-    'DatasetAPI',
 ]

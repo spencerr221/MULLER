@@ -105,8 +105,8 @@ class TensorOpsMixin:
         if not ori_path:
             raise ValueError("ori_path cannot be empty.")
 
-        import muller.api.dataset_api
-        org_dicts = muller.api.dataset_api.DatasetAPI.get_data_with_dict_from_file(ori_path, schema)
+        from muller.api.dataset.import_data import get_data_with_dict_from_file
+        org_dicts = get_data_with_dict_from_file(ori_path, schema)
         return muller.core.dataset.add_data(self, org_dicts, schema, workers, scheduler, disable_rechunk, progressbar,
                                            ignore_errors)
 
@@ -119,8 +119,8 @@ class TensorOpsMixin:
         if not isinstance(dataframes, list):
             raise TypeError("Expected a list for dataframes")
 
-        import muller.api.dataset_api
-        org_dicts = muller.api.dataset_api.DatasetAPI.get_data_with_dict_from_dataframes(dataframes, schema)
+        from muller.api.dataset.import_data import get_data_with_dict_from_dataframes
+        org_dicts = get_data_with_dict_from_dataframes(dataframes, schema)
         return muller.core.dataset.add_data(self, org_dicts, schema, workers, scheduler, disable_rechunk, progressbar,
                                            ignore_errors)
 

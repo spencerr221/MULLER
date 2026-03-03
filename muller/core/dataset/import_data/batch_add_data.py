@@ -25,7 +25,8 @@ def add_data(
     if not schema:
         schema = list(org_dicts[0].keys())
     else:
-        schema = muller.api.dataset_api.DatasetAPI.convert_schema(schema)
+        from muller.api.dataset.import_data import convert_schema
+        schema = convert_schema(schema)
 
     if not all(col in keys for col in schema):
         raise ValueError("The column names in schema do not match the dataset keys.")
