@@ -103,11 +103,7 @@ from muller.util.spinner import spinner
 
 # Import mixins
 from muller.core.dataset.mixins import (
-    DatasetOpsMixin,
-    ExportMixin,
     QueryMixin,
-    StatisticsMixin,
-    TensorOpsMixin,
     VersionControlMixin,
 )
 
@@ -118,10 +114,6 @@ _LOCKABLE_STORAGES = {LocalProvider}
 class Dataset(
     VersionControlMixin,
     QueryMixin,
-    TensorOpsMixin,
-    ExportMixin,
-    StatisticsMixin,
-    DatasetOpsMixin,
 ):
     def __init__(
             self,
@@ -779,6 +771,11 @@ class Dataset(
         """Sets the vector index. """
         self._vector_index = value
 
+    @property
+    def is_admin_mode(self) -> bool:
+        """Check if admin mode is enabled."""
+        return getattr(self, '_admin_mode', False)
+
     @staticmethod
     def _get_commit_id_for_address(address, version_state):
         if address in version_state["branch_commit_map"]:
@@ -813,24 +810,8 @@ class Dataset(
 
     def resolve_tensor_list(self, keys: List[str]) -> List[str]:
         """Resolve the tensor list."""
-        ret = []
-        for k in keys:
-            fullpath = k
-            if (
-                    self.version_state["tensor_names"].get(fullpath)
-                    in self.version_state["full_tensors"]
-            ):
-                ret.append(k)
-            else:
-                enabled_tensors = self.enabled_tensors
-                if fullpath[-1] != "/":
-                    fullpath = fullpath + "/"
-                hidden = self.meta.hidden_tensors
-                for temp_tensor in self.version_state["tensor_names"]:
-                    temp_tensor_valid = temp_tensor.startswith(fullpath) and temp_tensor not in hidden
-                    if temp_tensor_valid and (enabled_tensors is None or temp_tensor in enabled_tensors):
-                        ret.append(temp_tensor)
-        return ret
+        from muller.core.dataset.tensor_access import resolve_tensor_list
+        return resolve_tensor_list(self, keys)
 
     @user_permission_check
     def create_tensor(
@@ -929,7 +910,8 @@ class Dataset(
         if not ori_path:
             raise ValueError("ori_path cannot be empty.")
 
-        org_dicts = muller.api.dataset_api.DatasetAPI.get_data_with_dict_from_file(ori_path, schema)
+        from muller.api.dataset.import_data import get_data_with_dict_from_file
+        org_dicts = get_data_with_dict_from_file(ori_path, schema)
         return muller.core.dataset.add_data(self, org_dicts, schema, workers, scheduler, disable_rechunk, progressbar,
                                            ignore_errors)
 
@@ -942,7 +924,8 @@ class Dataset(
         if not isinstance(dataframes, list):
             raise TypeError("Expected a list for dataframes")
 
-        org_dicts = muller.api.dataset_api.DatasetAPI.get_data_with_dict_from_dataframes(dataframes, schema)
+        from muller.api.dataset.import_data import get_data_with_dict_from_dataframes
+        org_dicts = get_data_with_dict_from_dataframes(dataframes, schema)
         return muller.core.dataset.add_data(self, org_dicts, schema, workers, scheduler, disable_rechunk, progressbar,
                                            ignore_errors)
 
@@ -1260,19 +1243,8 @@ class Dataset(
 
     def query(self, tensor_name, query):
         """Query the target tensor column based on inverted index."""
-        inverted_index = self.get_inverted_index(tensor_name)
-        ids = inverted_index.search(query)
-        if inverted_index.use_uuid:
-            # map uuids to global idx
-            commit_node = self.version_state.get("commit_node")
-            commit_id = commit_node.parent.commit_id
-            uuids = self.get_tensor_uuids(tensor_name, commit_id)
-            index = set()
-            for idx, tmp_uuid in enumerate(uuids):
-                if str(tmp_uuid) in ids:
-                    index.add(idx)
-            ids = index
-        return ids
+        from muller.core.query.filter import query_with_inverted_index
+        return query_with_inverted_index(self, tensor_name, query)
 
     def filter(
             self,
@@ -1284,71 +1256,8 @@ class Dataset(
             **kwargs
     ):
         """Filter the dataset with specified function."""
-        compute_future = kwargs.get("compute_future", True)
-
-        def function_contents(func):
-            try:
-                func.__closure__
-            except Exception as e:
-                func = func.func
-                raise Exception from e
-            finally:
-                closure = tuple(cell.cell_contents for cell in func.__closure__) if func.__closure__ else ()
-                tmp_list = [func.__name__, func.__defaults__, func.__kwdefaults__, closure, func.__code__.co_code,
-                        func.__code__.co_consts]
-                return tmp_list
-
-        function_key = hash(function) if function is None or isinstance(function, str) else hash(
-            tuple(function_contents(function)))
-        key = str(index_query).strip() + str(function_key) + connector
-
-        if "filter" not in self.storage.upper_cache:
-            self.storage.upper_cache["filter"] = {}
-        cache_key = key + str(offset)
-        if compute_future and cache_key in self.storage.upper_cache["filter"]:
-            result = self.storage.upper_cache["filter"].pop(cache_key).result(timeout=None)  # index
-            if (len(result.filtered_index) > 0 and
-                    result.filtered_index[-1] != len(self) - 1):  # not last index, have next
-                self.filter_next(cache_key, function, index_query, connector, offset=result.filtered_index[-1] + 1,
-                                 limit=limit)
-            return result
-        if bool(self.storage.upper_cache["filter"]) and cache_key not in self.storage.upper_cache[
-            "filter"]:  # key doesn't match
-            self.storage.upper_cache["filter"] = {}  # clear cache
-
-        ids = []
-        if index_query is not None:
-            def dynamic_function():
-                return eval(index_query, {'__builtins__': None}, {'query': self.query_string})
-            ids_fuzzy_matching = dynamic_function()
-            ids = list(ids_fuzzy_matching)
-            ids.sort()
-        if offset > 0:
-            ids = [i for i in ids if i >= offset]
-        if function is None:  # fuzzy matching only
-            ids = ids[:limit]
-            ret = self[ids]
-            ret.filtered_index = ids
-            return ret
-
-        ds, ids = self._get_filter_res_from_conditions(function, connector, offset, limit, ids, index_query)
-
-        kwargs["index_query"] = index_query
-        kwargs["connector"] = connector
-        kwargs["ids"] = ids
-        kwargs["key"] = key
-        from muller.core.query import filter_dataset, query_dataset
-        fn = query_dataset if isinstance(function, str) else filter_dataset
-        ret = self._process_filter(fn, ds, function, offset, limit, kwargs)
-        return ret
-
-
-    def filter_next(self, key, function, index_query, connector, offset, limit):
-        """Filter the dataset with specified function (in advance and save the results to upper cache)"""
-        with ThreadPoolExecutor() as executor:
-            future = executor.submit(self.filter, function=function, index_query=index_query, connector=connector,
-                                     offset=offset, limit=limit)
-            self.storage.upper_cache["filter"].update({key: future})
+        from muller.core.query.filter import filter_dataset_with_cache
+        return filter_dataset_with_cache(self, function, index_query, connector, offset, limit, **kwargs)
 
     def aggregate(
             self,
@@ -1428,24 +1337,13 @@ class Dataset(
 
     def create_uuid_index(self):
         """Create uuid and index pair and stored in the disk. """
-        try:
-            current_id = self.version_state['commit_id']
-        except KeyError as e:
-            raise KeyError from e
-        if current_id != FIRST_COMMIT_ID:
-            raise ValueError
-        uuids = self.get_tensor_uuids(DATASET_UUID_NAME, current_id)
-        divide_to_shard(path=os.path.join(self.path, DATASET_UUID_NAME), uuids=uuids)
+        from muller.core.dataset.uuid.uuid_index import create_uuid_index
+        return create_uuid_index(self)
 
     def load_uuid_index(self):
         """Load all uuid indexes from shards. """
-        try:
-            current_id = self.version_state['commit_id']
-        except KeyError as e:
-            raise KeyError from e
-        if current_id != FIRST_COMMIT_ID:
-            raise ValueError
-        return load_all_shards(path=os.path.join(self.path, DATASET_UUID_NAME))
+        from muller.core.dataset.uuid.uuid_index import load_uuid_index
+        return load_uuid_index(self)
 
     @invalid_view_op
     @user_permission_check
@@ -1483,14 +1381,7 @@ class Dataset(
     def summary(self, force: bool = False):
         """Print out a summarization of the schema and statistic information of the dataset."""
         from muller.core.dataset.statistics.summary import summary_dataset
-        if (
-                not self.index.is_trivial()
-                and self.max_len > VIEW_SUMMARY_SAFE_LIMIT
-                and not force
-        ):
-            raise SummaryLimit(self.max_len, VIEW_SUMMARY_SAFE_LIMIT)
-        pretty_print = summary_dataset(self)
-        print(pretty_print)
+        summary_dataset(self, force)
 
     def to_dataframe(self, tensor_list: Optional[List[str]] = None,
                      index_list: Optional[List] = None,
@@ -1515,33 +1406,17 @@ class Dataset(
             InvalidTensorList: If ``tensor_list`` contains tensors that are not in the current columns.
             ToDataFrameLimit: If the length of ``index_list`` exceeds the TO_DATAFRAME_SAFE_LIMIT.
         """
-        # Verify that the target column is correctly specified.
-        if tensor_list and (len(tensor_list) > len(self.tensors) or
-                            not all(isinstance(x, str) and x in self.tensors for x in tensor_list)):
-            raise InvalidTensorList(tensor_list)
-        max_num = -1
-        if index_list and len(index_list) > TO_DATAFRAME_SAFE_LIMIT and not force:
-            max_num = len(index_list)
-        elif self.max_len > TO_DATAFRAME_SAFE_LIMIT and not force:
-            max_num = self.max_len
-        if max_num != -1:
-            raise ToDataFrameLimit(max_num, TO_DATAFRAME_SAFE_LIMIT)
-
-        return muller.core.dataset.to_dataframe(self, tensor_list, index_list)
+        from muller.core.dataset.export_data.to_dataframe import to_dataframe
+        return to_dataframe(self, tensor_list, index_list, force)
 
     def to_arrow(self):
         """Returns an arrow object of the dataset."""
         return muller.core.dataset.MULLERArrowDataset(self)
 
     def write_to_parquet(self, path, columns=None):
-        """Returns an arrow of the dataset."""
-        import pyarrow as pa
-        import pyarrow.parquet as pq
-        arrow_dataset = self.to_arrow()
-        arrow_table = arrow_dataset.to_table(columns)
-        writer = pa.BufferOutputStream()
-        pq.write_table(arrow_table, writer)
-        self.storage[path] = bytes(writer.getvalue())
+        """Write dataset to parquet format."""
+        from muller.core.dataset.export_data.to_parquet import write_to_parquet
+        write_to_parquet(self, path, columns)
 
     def statistics(self):
         """Get statistics info of dataset. Load from dataset_meta.json first, if empty, calculate and then save it.
@@ -1550,17 +1425,8 @@ class Dataset(
             >>> ds = muller.load("path_to_dataset")
             >>> ds.statistics()
         """
-        from muller.core.dataset.statistics.statistics import get_statistics
-        if self.has_head_changes:
-            warnings.warn(
-                "There are uncommitted changes, showing statistics from last committed version, try again after commit."
-            )
-
-        stats = load_statistics(self)
-        if not stats:
-            stats = get_statistics(self)
-            save_statistics(self, stats)
-        print(json.dumps(stats))
+        from muller.core.dataset.statistics.statistics import show_statistics
+        show_statistics(self)
 
     def to_json(
             self,
@@ -1578,11 +1444,8 @@ class Dataset(
             tensors (List of str, Optional): The tensor columns selected to be exported to the jsonl or json file.
             num_workers (int, Optional): The number of workers that can be used to dump to the path.
         """
-        if not (path.endswith("json") or path.endswith("jsonl")):
-            raise InvalidJsonFileName(path)
-        if num_workers <= 0:
-            raise InvalidNumWorkers(num_workers)
-        muller.core.dataset.to_json(self, path, tensors, num_workers)
+        from muller.core.dataset.export_data.to_json import to_json
+        to_json(self, path, tensors, num_workers)
 
     def to_mindrecord(
             self,
@@ -1609,203 +1472,54 @@ class Dataset(
                                                                        overwrite, scheduler)
 
     def size_approx(self):
-        """Estimates the size in bytes of the dataset. """
-        tensors = self.version_state["full_tensors"].values()
-        chunk_engines = [tensor.chunk_engine for tensor in tensors]
-        size = sum(c.num_chunks * c.min_chunk_size for c in chunk_engines)
-        return size
+        """Estimates the size in bytes of the dataset."""
+        from muller.core.dataset.statistics.size import size_approx
+        return size_approx(self)
 
     def get_tensors(self, include_hidden: bool = True, include_disabled=True) -> Dict[str, Tensor]:
         """All tensors belonging to this group, including those within sub groups. Always returns the sliced tensors."""
-        version_state = self.version_state
-        index = self.index
-        all_tensors = self.all_tensors_filtered(include_hidden, include_disabled)
-        return {
-            t: version_state["full_tensors"][
-                version_state["tensor_names"][t]
-            ][index]
-            for t in all_tensors
-        }
+        from muller.core.dataset.tensor_access import get_tensors
+        return get_tensors(self, include_hidden, include_disabled)
 
     def populate_meta(self, address: Optional[str] = None, verbose=True):
         """Populates the meta information for the dataset."""
-        if address is None:
-            commit_id = self._get_commit_id_for_address("main", self.version_state)
-        else:
-            commit_id = self._get_commit_id_for_address(address, self.version_state)
-
-        if dataset_exists(self.storage, commit_id):
-            load_meta(self)
-        elif not self.storage.empty():
-            # dataset does not exist, but the path was not empty
-            raise PathNotEmptyException
-        else:
-            if self.read_only:
-                # cannot create a new dataset when in read_only mode.
-                raise CouldNotCreateNewDatasetException(self.path)
-            try:
-                commit_id = self.version_state["commit_id"]
-            except KeyError as e:
-                raise VersionControlError from e
-
-            meta = DatasetMeta()
-            meta.set_dataset_creator(obtain_current_user())
-            key = get_dataset_meta_key(commit_id)
-            self.version_state["meta"] = meta
-            self.storage.register_muller_object(key, meta)
-
-            dataset_diff = DatasetDiff()
-            key = get_dataset_diff_key(commit_id)
-            self.storage.register_muller_object(key, dataset_diff)
-
-            self.flush()
+        from muller.core.dataset.metadata import populate_meta
+        return populate_meta(self, address, verbose)
 
     def all_tensors_filtered(self, include_hidden: bool = True, include_disabled=True) -> List[str]:
         """Names of all tensors belonging to this group, including those within sub groups"""
-        hidden_tensors = self.meta.hidden_tensors
-        tensor_names = self.version_state["tensor_names"]
-        enabled_tensors = self.enabled_tensors
-        final_results = []
-        for t in tensor_names:
-            if include_hidden or tensor_names[t] not in hidden_tensors:
-                if include_disabled or enabled_tensors is None or t in enabled_tensors:
-                    final_results.append(t)
-        return final_results
+        from muller.core.dataset.tensor_access import all_tensors_filtered
+        return all_tensors_filtered(self, include_hidden, include_disabled)
 
     def get_sample_indices(self, maxlen: int):
         """Get sample indices"""
-        vds_index = self.get_tensors(include_hidden=True).get(VDS_INDEX)
-        if vds_index:
-            return vds_index.numpy().reshape(-1).tolist()
-        return self.index.values[0].indices(maxlen)
+        from muller.core.dataset.tensor_access import get_sample_indices
+        return get_sample_indices(self, maxlen)
 
     def set_read_only(self, value: bool, err: bool):
-        """Set the read only variable. """
-        storage = self.storage
-        self.__dict__["_read_only"] = value
-
-        if value:
-            storage.enable_readonly()
-            if isinstance(storage, LRUCache) and storage.next_storage is not None:
-                storage.next_storage.enable_readonly()
-            unlock_dataset(self)  # Sherry: not support yet
-        else:
-            try:
-                locked = self.lock(err=err)
-                if locked:
-                    self.storage.disable_readonly()
-                    if (
-                            isinstance(storage, LRUCache)
-                            and storage.next_storage is not None
-                    ):
-                        storage.next_storage.disable_readonly()
-                else:
-                    self.__dict__["_read_only"] = True
-            except LockedException as e:
-                self.__dict__["_read_only"] = True
-                if err:
-                    raise e
+        """Set the read only variable."""
+        from muller.core.dataset.access_control import set_read_only
+        return set_read_only(self, value, err)
 
     def lock(self, err=False, verbose=True):
-        """Lock the dataset. """
-        if not self.is_head_node or not self._locking_enabled:
-            return True
-        storage = self.base_storage
-        if storage.read_only and not self._locked_out:
-            if err:
-                raise ReadOnlyModeError()
-            return False
-
-        if isinstance(storage, tuple(_LOCKABLE_STORAGES)) and (
-                not self.read_only or self._locked_out
-        ):
-            if not muller.constants.LOCK_LOCAL_DATASETS and isinstance(
-                    storage, LocalProvider
-            ):
-                return True
-            try:
-                # temporarily disable read only on base storage, to try to acquire lock,
-                # if exception, it will be again made readonly
-                storage.disable_readonly()
-                lock_dataset(
-                    self,
-                    lock_lost_callback=self._lock_lost_handler,
-                )
-            except LockedException as e:
-                self.set_read_only(True, False)
-                self.__dict__["_locked_out"] = True
-                if err:
-                    raise e
-                return False
-        return True
+        """Lock the dataset."""
+        from muller.core.dataset.access_control import lock
+        return lock(self, err, verbose)
 
     def enable_admin_mode(self, password: Optional[str] = None):
-        """Enable admin mode for dataset creator to modify all branches.
-        
-        Admin mode allows the dataset creator to override branch ownership
-        restrictions and modify branches created by other users.
-        
-        Args:
-            password: Optional password for additional security (currently not implemented)
-            
-        Raises:
-            UnAuthorizationError: If current user is not the dataset creator
-        """
-        from muller.core.auth.authorization import obtain_current_user
-        from muller.util.exceptions import UnAuthorizationError
-        from muller.client.log import logger
-        
-        current_user = obtain_current_user()
-        
-        try:
-            creator = self.version_state.get("meta").dataset_creator if self.version_state.get("meta") else None
-        except (TypeError, AttributeError):
-            try:
-                creator = self.obtain_dataset_creator_name_from_storage()
-            except Exception:
-                creator = None
-        
-        if not creator or current_user != creator:
-            raise UnAuthorizationError(
-                f"Only dataset creator [{creator}] can enable admin mode. Current user: [{current_user}]"
-            )
-        
-        # Optional password check (placeholder for future implementation)
-        # if password and not self._verify_admin_password(password):
-        #     raise UnAuthorizationError("Invalid admin password.")
-        
-        self._admin_mode = True
-        logger.info(f"Admin mode enabled for user [{current_user}]")
+        """Enable admin mode for dataset creator to modify all branches."""
+        from muller.core.dataset.access_control import enable_admin_mode
+        return enable_admin_mode(self, password)
     
     def disable_admin_mode(self):
         """Disable admin mode."""
-        from muller.client.log import logger
-        
-        self._admin_mode = False
-        logger.info("Admin mode disabled")
-    
-    @property
-    def is_admin_mode(self) -> bool:
-        """Check if admin mode is enabled.
-        
-        Returns:
-            bool: True if admin mode is enabled, False otherwise
-        """
-        return getattr(self, '_admin_mode', False)
+        from muller.core.dataset.access_control import disable_admin_mode
+        return disable_admin_mode(self)
 
     def tensor_diff(self, id_1, id_2, tensors: List[str] = None):
-        """
-        displays the differences between commits (in the same branch) for certain tensor
-        """
-        version_state, storage = self.version_state, self.storage
-        res = get_changes_and_messages(version_state, storage, id_1, id_2)
-        tensor_changes = res[3]  # The changes between id_2 and common ancestor on tensor (res[2] is always empty)
-        if tensor_changes is not None and len(tensor_changes) > 0:
-            for tensor_change_ver in tensor_changes:
-                _ = self.generate_add_update_value(tensor_change_ver, 0, None, False, tensors)
-
-        changes = {"tensor": (tensor_changes,)}
-        return changes
+        """Displays the differences between commits (in the same branch) for certain tensor."""
+        # Delegated to VersionControlMixin
+        return super().tensor_diff(id_1, id_2, tensors)
 
     def sub_ds(
             self,
@@ -1816,42 +1530,9 @@ class Dataset(
             read_only=None,
             verbose=True,
     ):
-        """Loads a nested dataset. Internal.
-
-        Args:
-            path (str): Path to sub directory.
-            empty (bool): If ``True``, all contents of the sub directory is cleared before initializing the sub dataset.
-            memory_cache_size (int): Memory cache size for the sub dataset.
-            local_cache_size (int): Local storage cache size for the sub dataset.
-            read_only (bool): Loads the sub dataset in read only mode if ``True``. Default ``False``.
-            verbose (bool): If ``True``, logs will be printed. Defaults to ``True``.
-
-        Returns:
-            Sub dataset
-
-        Note:
-            Virtual datasets are returned as such, they are not converted to views.
-        """
-        sub_storage = self.base_storage.subdir(path, read_only=read_only)
-
-        if empty:
-            sub_storage.clear()
-
-        path = sub_storage
-        cls = muller.core.dataset.Dataset
-
-        ret = cls(
-            generate_chain(
-                sub_storage,
-                memory_cache_size * MB,
-                local_cache_size * MB,
-            ),
-            path=path,
-            read_only=read_only,
-            verbose=verbose,
-        )
-        ret.parent_dataset = self
-        return ret
+        """Loads a nested dataset. Internal."""
+        from muller.core.dataset.subdataset import sub_ds
+        return sub_ds(self, path, empty, memory_cache_size, local_cache_size, read_only, verbose)
 
     def _reload_version_state(self):
         version_state = self.version_state
@@ -2012,56 +1693,3 @@ class Dataset(
             return True
         return False
 
-    def _get_filter_res_from_conditions(self, function, connector, offset, limit, ids, index_query):
-
-        if connector == "AND":
-            ids = [i - offset for i in ids]
-            ds = self[offset:]
-            ds = ds[ids] if index_query is not None else ds
-        elif connector == "OR":
-            ids = ids[:limit]
-            ds = self[offset:]
-        else:
-            raise Exception(f"Unsupported connector {connector}")
-        return ds, ids
-
-    def _process_filter(self, fn, ds, function, offset, limit, kwargs):
-
-        index_query = kwargs.get("index_query", None)
-        connector = kwargs.get("connector", None)
-        ids = kwargs.get("ids", None)
-        key = kwargs.get("key", None)
-
-        ret = fn(
-            ds,
-            function,
-            num_workers=kwargs.get("num_workers", 0),
-            scheduler=kwargs.get("scheduler", "threaded"),
-            progressbar=kwargs.get("progressbar", False),
-            save_result=kwargs.get("save_result", False),
-            result_path=kwargs.get("result_path", None),
-            result_ds_args=kwargs.get("result_ds_args", None),
-            offset=offset,
-            limit=limit,
-        )
-
-        if index_query is None and offset > 0:
-            ret.filtered_index = [i + offset for i in ret.filtered_index]
-        if connector == "AND" and index_query is not None:
-            index_map = [ids[local_index] for local_index in ret.filtered_index][:limit]
-            ret.filtered_index = index_map
-            if offset > 0:
-                ret.filtered_index = [i + offset for i in ret.filtered_index]
-        if connector == "OR":
-            if offset > 0:
-                ret.filtered_index = [i + offset for i in ret.filtered_index]
-            merged_ids = list(heapq.merge(ret.filtered_index, ids))[:limit]
-            ret = self[merged_ids]
-            ret.filtered_index = merged_ids
-
-        if limit and len(ret.filtered_index) > 0 and ret.filtered_index[-1] != len(self) - 1:
-            if kwargs.get("compute_future", True):
-                key = key + str(ret.filtered_index[-1] + 1)  # the start index of next filter computation
-                self.filter_next(key, function, index_query, connector, offset=ret.filtered_index[-1] + 1, limit=limit)
-        return ret
-    

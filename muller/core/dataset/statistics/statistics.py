@@ -6,13 +6,37 @@
 #
 # Copyright (c) 2026 Xueling Lin
 
+import json
+import warnings
+
 import numpy as np
+
 import muller
 
 
 def get_statistics(dataset: muller.Dataset) -> muller.Dataset:
     statistics_json = create_statistics_json(dataset)
     return statistics_json
+
+
+def show_statistics(dataset):
+    """Get statistics info of dataset. Load from dataset_meta.json first, if empty, calculate and then save it.
+
+    Args:
+        dataset: The dataset to get statistics for.
+    """
+    from muller.core.dataset.statistics.io import load_statistics, save_statistics
+
+    if dataset.has_head_changes:
+        warnings.warn(
+            "There are uncommitted changes, showing statistics from last committed version, try again after commit."
+        )
+
+    stats = load_statistics(dataset)
+    if not stats:
+        stats = get_statistics(dataset)
+        save_statistics(dataset, stats)
+    print(json.dumps(stats))
 
 
 def get_histogram(data):

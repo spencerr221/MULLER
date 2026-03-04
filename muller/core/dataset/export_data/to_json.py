@@ -42,7 +42,25 @@ def dump_to_path(data, path):
 
 
 def to_json(ds, target_path, tensors=None, num_workers=1):
-    """Export the dataset to a json file"""
+    """Export the dataset to a json file.
+
+    Args:
+        ds: The dataset to export.
+        target_path: The jsonl or json file name to save MULLER data.
+        tensors: The tensor columns selected to be exported to the jsonl or json file.
+        num_workers: The number of workers that can be used to dump to the path.
+
+    Raises:
+        InvalidJsonFileName: If the path doesn't end with .json or .jsonl.
+        InvalidNumWorkers: If num_workers is less than or equal to 0.
+    """
+    from muller.util.exceptions import InvalidJsonFileName, InvalidNumWorkers
+
+    if not (target_path.endswith("json") or target_path.endswith("jsonl")):
+        raise InvalidJsonFileName(target_path)
+    if num_workers <= 0:
+        raise InvalidNumWorkers(num_workers)
+
     def divide_ds(ds, num_workers):
         """Divide the dataset into chunks according to the number of workers"""
         sub_ds_list = []

@@ -141,10 +141,11 @@ class DatasetFromExternalSource:
                 ds.create_tensor(col_name, htype=htype, dtype=dtype, exist_ok=True,
                                  sample_compression=sample_compression)
 
-        @muller.compute
-        def data_to_muller(data, sample_out):
+        @muller.compute(batch_enable=True)
+        def data_to_muller(data_batch, sample_out):
             for col_name in schema:
-                sample_out[col_name].append(data[col_name])
+                col_data = [data[col_name] for data in data_batch]
+                sample_out[col_name].append(col_data)
             return sample_out
 
         if workers in [0, 1]:
@@ -156,6 +157,7 @@ class DatasetFromExternalSource:
             with ds:
                 data_to_muller().eval(org_dicts, ds, num_workers=workers,
                                     scheduler=scheduler, disable_rechunk=disable_rechunk,
-                                    progressbar=progressbar, ignore_errors=ignore_errors)
+                                    progressbar=progressbar, ignore_errors=ignore_errors,
+                                    cache_size=64)
 
         return ds

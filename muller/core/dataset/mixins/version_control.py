@@ -168,3 +168,17 @@ class VersionControlMixin:
         该函数理论上应该放在ChunkEngine里面，由于历史原因，先将就一下。
         """
         return muller.core.version_control.get_tensor_uuids(self, tensor_name, target_commit_id)
+
+    def tensor_diff(self, id_1, id_2, tensors: List[str] = None):
+        """Displays the differences between commits (in the same branch) for certain tensor."""
+        from muller.core.version_control.interface.diff_interface import get_changes_and_messages
+
+        version_state, storage = self.version_state, self.storage
+        res = get_changes_and_messages(version_state, storage, id_1, id_2)
+        tensor_changes = res[3]
+        if tensor_changes is not None and len(tensor_changes) > 0:
+            for tensor_change_ver in tensor_changes:
+                _ = self.generate_add_update_value(tensor_change_ver, 0, None, False, tensors)
+
+        changes = {"tensor": (tensor_changes,)}
+        return changes
