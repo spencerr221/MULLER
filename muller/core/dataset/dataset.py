@@ -70,7 +70,7 @@ from muller.core.version_control.functions import (
     save_statistics,
     save_version_info,
 )
-from muller.core.version_control.interface.diff_interface import (
+from muller.core.version_control.operations.diff import (
     get_changes_and_messages,
 )
 from muller.core.view.view_entry import ViewEntry
