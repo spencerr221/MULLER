@@ -56,5 +56,12 @@ nav:
     - Construct a MULLER dataset: getting_started/2_create_muller_dataset.md
     - Load, Append, Update, Delete, Query in a MULLER dataset: getting_started/3_muller_dataset_operations(load,append,update,delete,query).md
   - API Documents:
-      - Dataset: api/dataset.md
+    - Top-Level Functions: api/top-level-functions.md
+    - Dataset Creation: api/dataset-creation.md
+    - Dataset Methods: api/dataset-methods.md
+    - Dataset Query: api/dataset-query.md
+    - Dataset Version Control: api/dataset-version-control.md
+    - Dataset Export: api/dataset-export.md
+    - Advanced: api/advanced.md
+    
   - FAQ: faq.md
