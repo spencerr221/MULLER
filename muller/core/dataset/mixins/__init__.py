@@ -6,21 +6,17 @@
 #
 # Copyright (c) 2026 Xueling Lin
 
-"""Dataset mixins - organized by functionality."""
+"""Dataset mixins - organized by functionality.
 
-from muller.core.dataset.mixins.dataset_ops import DatasetOpsMixin
-from muller.core.dataset.mixins.export import ExportMixin
+Only complex mixins with substantial logic are kept here.
+Simple delegation methods are implemented directly in Dataset class.
+"""
+
 from muller.core.dataset.mixins.query import QueryMixin
-from muller.core.dataset.mixins.statistics import StatisticsMixin
-from muller.core.dataset.mixins.tensor_ops import TensorOpsMixin
 from muller.core.dataset.mixins.version_control import VersionControlMixin
 
 __all__ = [
-    'DatasetOpsMixin',
-    'ExportMixin',
     'QueryMixin',
-    'StatisticsMixin',
-    'TensorOpsMixin',
     'VersionControlMixin',
 ]
 

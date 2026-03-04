@@ -103,11 +103,7 @@ from muller.util.spinner import spinner
 
 # Import mixins
 from muller.core.dataset.mixins import (
-    DatasetOpsMixin,
-    ExportMixin,
     QueryMixin,
-    StatisticsMixin,
-    TensorOpsMixin,
     VersionControlMixin,
 )
 
@@ -118,10 +114,6 @@ _LOCKABLE_STORAGES = {LocalProvider}
 class Dataset(
     VersionControlMixin,
     QueryMixin,
-    TensorOpsMixin,
-    ExportMixin,
-    StatisticsMixin,
-    DatasetOpsMixin,
 ):
     def __init__(
             self,
@@ -779,6 +771,11 @@ class Dataset(
         """Sets the vector index. """
         self._vector_index = value
 
+    @property
+    def is_admin_mode(self) -> bool:
+        """Check if admin mode is enabled."""
+        return getattr(self, '_admin_mode', False)
+
     @staticmethod
     def _get_commit_id_for_address(address, version_state):
         if address in version_state["branch_commit_map"]:
@@ -813,24 +810,8 @@ class Dataset(
 
     def resolve_tensor_list(self, keys: List[str]) -> List[str]:
         """Resolve the tensor list."""
-        ret = []
-        for k in keys:
-            fullpath = k
-            if (
-                    self.version_state["tensor_names"].get(fullpath)
-                    in self.version_state["full_tensors"]
-            ):
-                ret.append(k)
-            else:
-                enabled_tensors = self.enabled_tensors
-                if fullpath[-1] != "/":
-                    fullpath = fullpath + "/"
-                hidden = self.meta.hidden_tensors
-                for temp_tensor in self.version_state["tensor_names"]:
-                    temp_tensor_valid = temp_tensor.startswith(fullpath) and temp_tensor not in hidden
-                    if temp_tensor_valid and (enabled_tensors is None or temp_tensor in enabled_tensors):
-                        ret.append(temp_tensor)
-        return ret
+        from muller.core.dataset.tensor_access import resolve_tensor_list
+        return resolve_tensor_list(self, keys)
 
     @user_permission_check
     def create_tensor(
@@ -1497,195 +1478,48 @@ class Dataset(
 
     def get_tensors(self, include_hidden: bool = True, include_disabled=True) -> Dict[str, Tensor]:
         """All tensors belonging to this group, including those within sub groups. Always returns the sliced tensors."""
-        version_state = self.version_state
-        index = self.index
-        all_tensors = self.all_tensors_filtered(include_hidden, include_disabled)
-        return {
-            t: version_state["full_tensors"][
-                version_state["tensor_names"][t]
-            ][index]
-            for t in all_tensors
-        }
+        from muller.core.dataset.tensor_access import get_tensors
+        return get_tensors(self, include_hidden, include_disabled)
 
     def populate_meta(self, address: Optional[str] = None, verbose=True):
         """Populates the meta information for the dataset."""
-        if address is None:
-            commit_id = self._get_commit_id_for_address("main", self.version_state)
-        else:
-            commit_id = self._get_commit_id_for_address(address, self.version_state)
-
-        if dataset_exists(self.storage, commit_id):
-            load_meta(self)
-        elif not self.storage.empty():
-            # dataset does not exist, but the path was not empty
-            raise PathNotEmptyException
-        else:
-            if self.read_only:
-                # cannot create a new dataset when in read_only mode.
-                raise CouldNotCreateNewDatasetException(self.path)
-            try:
-                commit_id = self.version_state["commit_id"]
-            except KeyError as e:
-                raise VersionControlError from e
-
-            meta = DatasetMeta()
-            meta.set_dataset_creator(obtain_current_user())
-            key = get_dataset_meta_key(commit_id)
-            self.version_state["meta"] = meta
-            self.storage.register_muller_object(key, meta)
-
-            dataset_diff = DatasetDiff()
-            key = get_dataset_diff_key(commit_id)
-            self.storage.register_muller_object(key, dataset_diff)
-
-            self.flush()
+        from muller.core.dataset.metadata import populate_meta
+        return populate_meta(self, address, verbose)
 
     def all_tensors_filtered(self, include_hidden: bool = True, include_disabled=True) -> List[str]:
         """Names of all tensors belonging to this group, including those within sub groups"""
-        hidden_tensors = self.meta.hidden_tensors
-        tensor_names = self.version_state["tensor_names"]
-        enabled_tensors = self.enabled_tensors
-        final_results = []
-        for t in tensor_names:
-            if include_hidden or tensor_names[t] not in hidden_tensors:
-                if include_disabled or enabled_tensors is None or t in enabled_tensors:
-                    final_results.append(t)
-        return final_results
+        from muller.core.dataset.tensor_access import all_tensors_filtered
+        return all_tensors_filtered(self, include_hidden, include_disabled)
 
     def get_sample_indices(self, maxlen: int):
         """Get sample indices"""
-        vds_index = self.get_tensors(include_hidden=True).get(VDS_INDEX)
-        if vds_index:
-            return vds_index.numpy().reshape(-1).tolist()
-        return self.index.values[0].indices(maxlen)
+        from muller.core.dataset.tensor_access import get_sample_indices
+        return get_sample_indices(self, maxlen)
 
     def set_read_only(self, value: bool, err: bool):
-        """Set the read only variable. """
-        storage = self.storage
-        self.__dict__["_read_only"] = value
-
-        if value:
-            storage.enable_readonly()
-            if isinstance(storage, LRUCache) and storage.next_storage is not None:
-                storage.next_storage.enable_readonly()
-            unlock_dataset(self)  # Sherry: not support yet
-        else:
-            try:
-                locked = self.lock(err=err)
-                if locked:
-                    self.storage.disable_readonly()
-                    if (
-                            isinstance(storage, LRUCache)
-                            and storage.next_storage is not None
-                    ):
-                        storage.next_storage.disable_readonly()
-                else:
-                    self.__dict__["_read_only"] = True
-            except LockedException as e:
-                self.__dict__["_read_only"] = True
-                if err:
-                    raise e
+        """Set the read only variable."""
+        from muller.core.dataset.access_control import set_read_only
+        return set_read_only(self, value, err)
 
     def lock(self, err=False, verbose=True):
-        """Lock the dataset. """
-        if not self.is_head_node or not self._locking_enabled:
-            return True
-        storage = self.base_storage
-        if storage.read_only and not self._locked_out:
-            if err:
-                raise ReadOnlyModeError()
-            return False
-
-        if isinstance(storage, tuple(_LOCKABLE_STORAGES)) and (
-                not self.read_only or self._locked_out
-        ):
-            if not muller.constants.LOCK_LOCAL_DATASETS and isinstance(
-                    storage, LocalProvider
-            ):
-                return True
-            try:
-                # temporarily disable read only on base storage, to try to acquire lock,
-                # if exception, it will be again made readonly
-                storage.disable_readonly()
-                lock_dataset(
-                    self,
-                    lock_lost_callback=self._lock_lost_handler,
-                )
-            except LockedException as e:
-                self.set_read_only(True, False)
-                self.__dict__["_locked_out"] = True
-                if err:
-                    raise e
-                return False
-        return True
+        """Lock the dataset."""
+        from muller.core.dataset.access_control import lock
+        return lock(self, err, verbose)
 
     def enable_admin_mode(self, password: Optional[str] = None):
-        """Enable admin mode for dataset creator to modify all branches.
-        
-        Admin mode allows the dataset creator to override branch ownership
-        restrictions and modify branches created by other users.
-        
-        Args:
-            password: Optional password for additional security (currently not implemented)
-            
-        Raises:
-            UnAuthorizationError: If current user is not the dataset creator
-        """
-        from muller.core.auth.authorization import obtain_current_user
-        from muller.util.exceptions import UnAuthorizationError
-        from muller.client.log import logger
-        
-        current_user = obtain_current_user()
-        
-        try:
-            creator = self.version_state.get("meta").dataset_creator if self.version_state.get("meta") else None
-        except (TypeError, AttributeError):
-            try:
-                creator = self.obtain_dataset_creator_name_from_storage()
-            except Exception:
-                creator = None
-        
-        if not creator or current_user != creator:
-            raise UnAuthorizationError(
-                f"Only dataset creator [{creator}] can enable admin mode. Current user: [{current_user}]"
-            )
-        
-        # Optional password check (placeholder for future implementation)
-        # if password and not self._verify_admin_password(password):
-        #     raise UnAuthorizationError("Invalid admin password.")
-        
-        self._admin_mode = True
-        logger.info(f"Admin mode enabled for user [{current_user}]")
+        """Enable admin mode for dataset creator to modify all branches."""
+        from muller.core.dataset.access_control import enable_admin_mode
+        return enable_admin_mode(self, password)
     
     def disable_admin_mode(self):
         """Disable admin mode."""
-        from muller.client.log import logger
-        
-        self._admin_mode = False
-        logger.info("Admin mode disabled")
-    
-    @property
-    def is_admin_mode(self) -> bool:
-        """Check if admin mode is enabled.
-        
-        Returns:
-            bool: True if admin mode is enabled, False otherwise
-        """
-        return getattr(self, '_admin_mode', False)
+        from muller.core.dataset.access_control import disable_admin_mode
+        return disable_admin_mode(self)
 
     def tensor_diff(self, id_1, id_2, tensors: List[str] = None):
-        """
-        displays the differences between commits (in the same branch) for certain tensor
-        """
-        version_state, storage = self.version_state, self.storage
-        res = get_changes_and_messages(version_state, storage, id_1, id_2)
-        tensor_changes = res[3]  # The changes between id_2 and common ancestor on tensor (res[2] is always empty)
-        if tensor_changes is not None and len(tensor_changes) > 0:
-            for tensor_change_ver in tensor_changes:
-                _ = self.generate_add_update_value(tensor_change_ver, 0, None, False, tensors)
-
-        changes = {"tensor": (tensor_changes,)}
-        return changes
+        """Displays the differences between commits (in the same branch) for certain tensor."""
+        # Delegated to VersionControlMixin
+        return super().tensor_diff(id_1, id_2, tensors)
 
     def sub_ds(
             self,
@@ -1696,42 +1530,9 @@ class Dataset(
             read_only=None,
             verbose=True,
     ):
-        """Loads a nested dataset. Internal.
-
-        Args:
-            path (str): Path to sub directory.
-            empty (bool): If ``True``, all contents of the sub directory is cleared before initializing the sub dataset.
-            memory_cache_size (int): Memory cache size for the sub dataset.
-            local_cache_size (int): Local storage cache size for the sub dataset.
-            read_only (bool): Loads the sub dataset in read only mode if ``True``. Default ``False``.
-            verbose (bool): If ``True``, logs will be printed. Defaults to ``True``.
-
-        Returns:
-            Sub dataset
-
-        Note:
-            Virtual datasets are returned as such, they are not converted to views.
-        """
-        sub_storage = self.base_storage.subdir(path, read_only=read_only)
-
-        if empty:
-            sub_storage.clear()
-
-        path = sub_storage
-        cls = muller.core.dataset.Dataset
-
-        ret = cls(
-            generate_chain(
-                sub_storage,
-                memory_cache_size * MB,
-                local_cache_size * MB,
-            ),
-            path=path,
-            read_only=read_only,
-            verbose=verbose,
-        )
-        ret.parent_dataset = self
-        return ret
+        """Loads a nested dataset. Internal."""
+        from muller.core.dataset.subdataset import sub_ds
+        return sub_ds(self, path, empty, memory_cache_size, local_cache_size, read_only, verbose)
 
     def _reload_version_state(self):
         version_state = self.version_state
