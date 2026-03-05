@@ -62,6 +62,37 @@ import muller
 print(muller.__version__)
 ```
 
+## Agent Skills (Natural Language Interface)
+
+MULLER includes an [Agent Skills](https://agentskills.io) integration that allows AI agents to manage datasets through natural language commands.
+
+#### Quick Start with Agent Skills
+
+```bash
+# Create an image classification dataset
+python3 .claude/skills/muller-dataset/scripts/dataset_manager.py create \
+  --path ./my_dataset --tensors "images:image:jpg,labels:class_label:uint32"
+
+# Get dataset info
+python3 .claude/skills/muller-dataset/scripts/dataset_manager.py info --path ./my_dataset
+
+# Query samples
+python3 .claude/skills/muller-dataset/scripts/data_operations.py query \
+  --path ./my_dataset --filter "labels > 5" --limit 10
+```
+
+#### Using with AI Agents
+
+When using MULLER with AI coding assistants (Claude Code, Cursor, etc.), you can use natural language:
+
+- "Create an image dataset at ./photos with jpg compression"
+- "Add all images from ./data/ folder to the dataset"
+- "Show me samples where label equals 5"
+- "Get statistics for my dataset"
+
+The agent will automatically use the skill scripts to execute operations. See [.claude/skills/muller-dataset/](.claude/skills/muller-dataset/) for details.
+
+
 ## Examples
 #### 1. Create a MULLER Dataset
 * Note: MULLER support 12+ data types of different modalities, including scalars, vectors, text, images, videos, and audio, with 20+ compression formats (e.g., LZ4, JPG, PNG, MP3, MP4, AVI, WAV).
