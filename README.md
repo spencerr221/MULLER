@@ -64,22 +64,69 @@ print(muller.__version__)
 
 ## Agent Skills (Natural Language Interface)
 
-MULLER includes an [Agent Skills](https://agentskills.io) integration that allows you to manage datasets through natural language when using AI coding assistants (Claude Code, Cursor, etc.).
+MULLER includes [Agent Skills](https://agentskills.io) integration that allows you to manage datasets through natural language when using AI coding assistants (Claude Code, Cursor, etc.).
 
-#### Usage Examples
+### Available Skills
+
+**1. muller-dataset** - Basic dataset operations
+- Create and manage datasets
+- Add, update, delete data
+- Query and filter samples
+- Inspect dataset information
+
+**2. muller-version-control** - Git-like version control
+- Commit changes
+- Create and merge branches
+- View history and diffs
+- Conflict resolution
+
+**3. muller-advanced-query** - Advanced querying
+- Create indexes (inverted, vector)
+- Vector similarity search
+- Aggregation queries
+- Complex filtering
+
+**4. muller-export** - Export and integration
+- Export to Arrow, Parquet, JSON
+- Convert to NumPy arrays
+- Export to MindRecord (MindSpore)
+- Framework integration
+
+### Usage Examples
 
 Simply describe what you want in natural language:
 
+**Basic Operations:**
 - **"Create an image classification dataset at ./my_photos with jpg compression and uint32 labels"**
 - **"Add all images from the ./data/ folder to my dataset"**
 - **"Show me all samples where label equals 5"**
 - **"Get statistics and summary for my dataset"**
-- **"Query samples where labels are greater than 10"**
+
+**Version Control:**
+- **"Commit my dataset changes with message 'Added 100 new samples'"**
+- **"Create a new branch called dev-1 for my dataset"**
+- **"Merge the dev-1 branch into main"**
+- **"Show me the commit history"**
+
+**Advanced Queries:**
+- **"Create a vector index for embeddings using HNSW"**
+- **"Find the top 10 most similar vectors to my query"**
+- **"Create an inverted index for text search on descriptions"**
+- **"Aggregate data by category and count samples"**
+
+**Export & Integration:**
+- **"Export my dataset to Parquet format"**
+- **"Convert the embeddings tensor to NumPy array"**
+- **"Export dataset to JSON for my web API"**
+- **"Export to Arrow format for data sharing"**
 
 The AI agent will automatically execute the appropriate MULLER operations. No need to remember API calls or command syntax!
 
-For more details, see [.claude/skills/muller-dataset/](.claude/skills/muller-dataset/).
-
+For more details, see:
+- [.claude/skills/muller-dataset/](.claude/skills/muller-dataset/)
+- [.claude/skills/muller-version-control/](.claude/skills/muller-version-control/)
+- [.claude/skills/muller-advanced-query/](.claude/skills/muller-advanced-query/)
+- [.claude/skills/muller-export/](.claude/skills/muller-export/)
 
 ## Coding Examples (Pythonn Interface)
 #### 1. Create a MULLER Dataset

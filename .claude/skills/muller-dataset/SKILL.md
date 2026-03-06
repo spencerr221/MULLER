@@ -6,6 +6,14 @@ compatibility: Requires Python 3.11+, muller package installed
 
 # MULLER Dataset Management
 
+## IMPORTANT: How to Use This Skill
+
+**DO NOT create new Python files.** Always use the existing scripts provided in this skill:
+- Use `scripts/dataset_manager.py` for dataset and tensor management
+- Use `scripts/data_operations.py` for data CRUD operations
+
+Execute these scripts directly with `python3` command. Never write new scripts to the project root.
+
 ## When to Use This Skill
 
 Use this skill when the user wants to:
@@ -35,17 +43,17 @@ Manages dataset lifecycle and structure.
 **Usage:**
 ```bash
 # Create dataset
-uv run scripts/dataset_manager.py create --path ./my_dataset
+python3 .claude/skills/muller-dataset/scripts/dataset_manager.py create --path ./my_dataset
 
 # Create with tensors
-uv run scripts/dataset_manager.py create --path ./my_dataset \
-  --tensors "images:image:jpg,labels:generic:int32"
+python3 .claude/skills/muller-dataset/scripts/dataset_manager.py create --path ./my_dataset \
+  --tensors "images:image:jpg,labels:class_label:uint32"
 
 # Get info
-uv run scripts/dataset_manager.py info --path ./my_dataset
+python3 .claude/skills/muller-dataset/scripts/dataset_manager.py info --path ./my_dataset
 
 # Create tensor
-uv run scripts/dataset_manager.py create-tensor --path ./my_dataset \
+python3 .claude/skills/muller-dataset/scripts/dataset_manager.py create-tensor --path ./my_dataset \
   --name embeddings --htype vector --dtype float32
 ```
 
@@ -64,15 +72,15 @@ Handles data CRUD operations.
 **Usage:**
 ```bash
 # Append sample
-uv run scripts/data_operations.py append --path ./my_dataset \
+python3 .claude/skills/muller-dataset/scripts/data_operations.py append --path ./my_dataset \
   --data '{"images": "path/to/img.jpg", "labels": 1}'
 
 # Query samples
-uv run scripts/data_operations.py query --path ./my_dataset \
+python3 .claude/skills/muller-dataset/scripts/data_operations.py query --path ./my_dataset \
   --filter "labels > 5" --limit 10
 
 # Import from file
-uv run scripts/data_operations.py import --path ./my_dataset \
+python3 .claude/skills/muller-dataset/scripts/data_operations.py import --path ./my_dataset \
   --source data.jsonl
 ```
 
@@ -82,15 +90,15 @@ uv run scripts/data_operations.py import --path ./my_dataset \
 
 ```bash
 # 1. Create dataset with image and label tensors
-uv run scripts/dataset_manager.py create --path ./image_dataset \
+python3 .claude/skills/muller-dataset/scripts/dataset_manager.py create --path ./image_dataset \
   --tensors "images:image:jpg,labels:class_label:uint32"
 
 # 2. Import images from directory
-uv run scripts/data_operations.py import --path ./image_dataset \
+python3 .claude/skills/muller-dataset/scripts/data_operations.py import --path ./image_dataset \
   --source ./photos/ --tensor images --pattern "*.jpg"
 
 # 3. Query specific samples
-uv run scripts/data_operations.py query --path ./image_dataset \
+python3 .claude/skills/muller-dataset/scripts/data_operations.py query --path ./image_dataset \
   --filter "labels == 5"
 ```
 
@@ -98,11 +106,11 @@ uv run scripts/data_operations.py query --path ./image_dataset \
 
 ```bash
 # 1. Create dataset
-uv run scripts/dataset_manager.py create --path ./text_dataset \
+python3 .claude/skills/muller-dataset/scripts/dataset_manager.py create --path ./text_dataset \
   --tensors "text:text,embeddings:vector:float32"
 
 # 2. Import from JSONL file
-uv run scripts/data_operations.py import --path ./text_dataset \
+python3 .claude/skills/muller-dataset/scripts/data_operations.py import --path ./text_dataset \
   --source data.jsonl
 ```
 
@@ -110,13 +118,13 @@ uv run scripts/data_operations.py import --path ./text_dataset \
 
 ```bash
 # Get summary
-uv run scripts/dataset_manager.py info --path ./my_dataset
+python3 .claude/skills/muller-dataset/scripts/dataset_manager.py info --path ./my_dataset
 
 # Get statistics
-uv run scripts/dataset_manager.py stats --path ./my_dataset
+python3 .claude/skills/muller-dataset/scripts/dataset_manager.py stats --path ./my_dataset
 
 # Query samples
-uv run scripts/data_operations.py query --path ./my_dataset --limit 5
+python3 .claude/skills/muller-dataset/scripts/data_operations.py query --path ./my_dataset --limit 5
 ```
 
 ## Data Types (htypes)
