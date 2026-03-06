@@ -7,35 +7,38 @@
     <img src="docs/figures/motivation-github.png" width="700">
 </div>
 
-At modern training scales, AI datasets are no longer curated by a single user, but collaboratively by multiple data engineers working on parallel data branches. In practice, engineers independently check out dataset branches, perform LLM-assisted data annotation and exploration, and commit their changes. As the main dataset evolves, some branches can be fast-forward merged (e.g., merging _Branch 1_ at t<sub>2</sub>), while others require three-way merges with conflict detection (e.g., merging _Branch 2_ at t<sub>3</sub>).
+## Overview
 
-However, existing data lake formats (e.g., Parquet, Lance, Iceberg, Deep Lake) do not natively support such collaborative, Git-like data workflows.
-To address this gap, we introduce **MULLER**, a novel Multimodal data lake format designed for collaborative AI data workflows, with the following key features:
-* **Mutimodal data support** with than 12 data types of different modalities, including scalars, vectors, text, images, videos, and audio, with 20+ compression formats (e.g., LZ4, JPG, PNG, MP3, MP4, AVI, WAV).
-* **Data sampling, exploration, and analysis** through low-latency random access and fast scan.
-* **Array-oriented hybrid search engine** that jointly queries vector, text, and scalar data.
-* **Git-like data versioning** with support for commit, checkout, diff, conflict detection and resolution, as well as merge. Specifically, to the best of our knowledge, MULLER is the first data lake format to support _fine-grained row-level updates and three-way merges_ across multiple coexisting data branches.
-* **Seamless integration with LLM/MLLM data training and processing pipelines**.
+Modern AI datasets require collaborative workflows where multiple engineers work on parallel branches, perform LLM-assisted annotation, and merge changes—similar to Git workflows for code. However, existing data lake formats (Parquet, Lance, Iceberg, Deep Lake) lack native support for such collaborative patterns.
 
-Here is a [video demo](https://www.youtube.com/watch?v=okHzhbp7an0) of MULLER to demonstrate the basic functions.
-Please check the tutorial at [MULLER website](https://the-ai-framework-and-data-tech-lab-hk.github.io/MULLER/) with [detailed API documents](https://the-ai-framework-and-data-tech-lab-hk.github.io/MULLER/api/top-level-functions/).
+**MULLER** is a multimodal data lake format designed for collaborative AI data workflows with:
 
----
+- **Multimodal data support**: 12+ data types (scalars, vectors, text, images, videos, audio) with 20+ compression formats (LZ4, JPG, PNG, MP3, MP4, etc.)
+- **Hybrid search engine**: Joint queries across vector, text, and scalar data with low-latency random access
+- **Git-like versioning**: Commit, branch, merge with fine-grained row-level updates and three-way merge conflict resolution
+- **Seamless integration**: Works with PyTorch, TensorFlow, and LLM/MLLM training pipelines
 
-### 🤖 Natural Language Interface with Agent Skills
+📺 [Video demo](https://www.youtube.com/watch?v=okHzhbp7an0) | 📖 [Documentation](https://the-ai-framework-and-data-tech-lab-hk.github.io/MULLER/) | 🔗 [API Reference](https://the-ai-framework-and-data-tech-lab-hk.github.io/MULLER/api/top-level-functions/)
 
-MULLER includes [Agent Skills](https://agentskills.io) that let you manage datasets through natural language when using **Claude Code** or compatible AI coding assistants. Simply describe what you want—no need to remember API calls or command syntax!
+## Quick Start
 
-**Quick examples:**
-- "Create an image classification dataset with jpg compression"
-- "Commit my changes with message 'Added 100 samples'"
-- "Find the top 10 most similar vectors to my query"
-- "Export my dataset to Parquet format"
+### Choose Your Interface
 
-👉 See the [Agent Skills section](#agent-skills-natural-language-interface) below for full details.
----
+MULLER offers two ways to work with your data:
 
-## Getting Started
+**🤖 Natural Language** (via Agent Skills)
+- Use Claude Code or compatible AI assistants
+- Describe operations in plain English
+- Best for: Interactive exploration, rapid prototyping
+- [Jump to Natural Language guide →](#natural-language-interface)
+
+**🐍 Python API**
+- Direct programmatic control
+- Full feature access
+- Best for: Production pipelines, automation
+- [Jump to Python API guide →](#python-api)
+
+### Installation
 
 #### Prerequisites
 
@@ -44,293 +47,241 @@ MULLER includes [Agent Skills](https://agentskills.io) that let you manage datas
 - A C++17 compatible compiler (tested with gcc 11.4.0)
 - Linux or macOS (tested on Ubuntu 22.04)
 
-#### 1. (Recommended) Create a new Conda environment
+#### Install MULLER
+
+1. (Recommended) Create a new Conda environment:
 ```bash
 conda create -n muller python=3.11
 conda activate muller
 ```
-#### 2. Installation
-* First, clone the MULLER repository.
+
+2. Clone and install:
 ```bash
 git clone https://github.com/The-AI-Framework-and-Data-Tech-Lab-HK/MULLER.git
 cd MULLER
-chmod 777 muller/util/sparsehash/build_proj.sh  # You may need to modify the script permissions.
-```
-* [Dafault] Install from code
-```
+chmod 777 muller/util/sparsehash/build_proj.sh
 pip install .   # Use `pip install . -v` to view detailed build logs
 ```
-* [Optional] Development (editable) installation
-```bash
-pip install -e .
-```
-* [Optional] Skip building C++ modules
 
-The Python implementation provides the same core functionality as the C++ modules.
-If you only need the basic features of MULLER, you may skip building the C++ extensions:
-```bash
-BUILD_CPP=false pip install .
-```
-#### 3. Verify the Installation
+3. Verify installation:
 ```python
 import muller
 print(muller.__version__)
 ```
 
-## Agent Skills (Natural Language Interface)
+**Optional installations:**
+- Development mode: `pip install -e .`
+- Skip C++ modules: `BUILD_CPP=false pip install .`
 
-MULLER includes [Agent Skills](https://agentskills.io) integration that allows you to manage datasets through natural language when using **Claude Code** or compatible AI coding assistants.
+## Natural Language Interface
 
-**Note:** These skills are located in the `.claude/skills/` directory and follow Claude Code's Agent Skills format. Other IDEs like Cursor or Windsurf may require different integration approaches (e.g., `.cursorrules` for Cursor). The skills are currently optimized for Claude Code.
+MULLER includes [Agent Skills](https://agentskills.io) that let you manage datasets through natural language when using **Claude Code** or compatible AI assistants.
 
-### Available Skills
+**Compatibility note:** Skills are located in `.claude/skills/` and optimized for Claude Code. Other IDEs (Cursor, Windsurf) may require different integration approaches.
 
-**1. muller-dataset** - Basic dataset operations
-- Create and manage datasets
-- Add, update, delete data
-- Query and filter samples
-- Inspect dataset information
+### Available Operations
 
-**2. muller-version-control** - Git-like version control
-- Commit changes
-- Create and merge branches
-- View history and diffs
-- Conflict resolution
+**Dataset Management** (muller-dataset)
+- "Create an image classification dataset at ./my_photos with jpg compression"
+- "Add all images from the ./data/ folder to my dataset"
+- "Show me all samples where label equals 5"
+- "Get statistics and summary for my dataset"
 
-**3. muller-advanced-query** - Advanced querying
-- Create indexes (inverted, vector)
-- Vector similarity search
-- Aggregation queries
-- Complex filtering
+**Version Control** (muller-version-control)
+- "Commit my dataset changes with message 'Added 100 new samples'"
+- "Create a new branch called dev-1"
+- "Merge the dev-1 branch into main"
+- "Show me the commit history"
 
-**4. muller-export** - Export and integration
-- Export to Arrow, Parquet, JSON
-- Convert to NumPy arrays
-- Export to MindRecord (MindSpore)
-- Framework integration
+**Advanced Queries** (muller-advanced-query)
+- "Create a vector index for embeddings using HNSW"
+- "Find the top 10 most similar vectors to my query"
+- "Create an inverted index for text search on descriptions"
+- "Aggregate data by category and count samples"
 
-### Usage Examples
+**Export & Integration** (muller-export)
+- "Export my dataset to Parquet format"
+- "Convert the embeddings tensor to NumPy array"
+- "Export dataset to JSON for my web API"
 
-Simply describe what you want in natural language:
+For detailed skill documentation, see [.claude/skills/](.claude/skills/).
 
-**Basic Operations:**
-- **"Create an image classification dataset at ./my_photos with jpg compression and uint32 labels"**
-- **"Add all images from the ./data/ folder to my dataset"**
-- **"Show me all samples where label equals 5"**
-- **"Get statistics and summary for my dataset"**
+## Python API
 
-**Version Control:**
-- **"Commit my dataset changes with message 'Added 100 new samples'"**
-- **"Create a new branch called dev-1 for my dataset"**
-- **"Merge the dev-1 branch into main"**
-- **"Show me the commit history"**
+### Create a Dataset
 
-**Advanced Queries:**
-- **"Create a vector index for embeddings using HNSW"**
-- **"Find the top 10 most similar vectors to my query"**
-- **"Create an inverted index for text search on descriptions"**
-- **"Aggregate data by category and count samples"**
-
-**Export & Integration:**
-- **"Export my dataset to Parquet format"**
-- **"Convert the embeddings tensor to NumPy array"**
-- **"Export dataset to JSON for my web API"**
-- **"Export to Arrow format for data sharing"**
-
-The AI agent will automatically execute the appropriate MULLER operations. No need to remember API calls or command syntax!
-
-For more details, see:
-- [.claude/skills/muller-dataset/](.claude/skills/muller-dataset/)
-- [.claude/skills/muller-version-control/](.claude/skills/muller-version-control/)
-- [.claude/skills/muller-advanced-query/](.claude/skills/muller-advanced-query/)
-- [.claude/skills/muller-export/](.claude/skills/muller-export/)
-
-## Coding Examples (Pythonn Interface)
-#### 1. Create a MULLER Dataset
-* Note: MULLER support 12+ data types of different modalities, including scalars, vectors, text, images, videos, and audio, with 20+ compression formats (e.g., LZ4, JPG, PNG, MP3, MP4, AVI, WAV).
+MULLER supports 12+ data types across different modalities with 20+ compression formats:
 
 | htype | sample_compression | dtype |
 | --- | --- | --- |
-| image | Required (one of): bmp, dib, gif, ico, jpg, jpeg, <br>jpeg2000, pcx, png, ppm, sgi, tga, tiff, <br>webp, wmf, xbm, eps, fli, im, msp, mpo | Default: `uint8` (modification not recommended) |
-| video | Required (one of): mp4, mkv, avi | Default: `uint8` (modification not recommended) |
-| audio | Required (one of): flac, mp3, wav | Default: `float64` (modification not recommended) |
-| class_label | Default: None (null); Optional: lz4 | Default: `uint32` (modification not recommended) |
-| bbox | Default: None (null); Optional: lz4 | Default: `float32` (modification not recommended) |
-| text  | Default: None (null); Optional: lz4 | Default: `str` (modification not recommended) |
-| json  | Default: None (null); Optional: lz4 | - |
-| list  | Default: None (null); Optional: lz4 | - |
-| vector  | Default: None (null); Optional: lz4 | Default:  `float32` |
-| generic  | Default: None (null); Optional: lz4 | Default: None (undeclared, inferred from data); Declaration at creation is recommended.<br>Options: `int8`, `int16`, `int32`, `int64`, `uint8`, `uint16`, <br>`uint32`, `float32`, `float64`, `bool` |
+| image | bmp, gif, jpg, jpeg, png, tiff, webp, etc. | `uint8` |
+| video | mp4, mkv, avi | `uint8` |
+| audio | flac, mp3, wav | `float64` |
+| class_label | None (null) or lz4 | `uint32` |
+| bbox | None (null) or lz4 | `float32` |
+| text | None (null) or lz4 | `str` |
+| vector | None (null) or lz4 | `float32` |
+| generic | None (null) or lz4 | `int8`, `int16`, `int32`, `int64`, `uint8`, `uint16`, `uint32`, `float32`, `float64`, `bool` |
 
 ```python
 import muller
 
-# Create an empty MULLER datatset
+# Create dataset
 ds = muller.dataset(path='test_dataset/', overwrite=True)
 
-# Create Columns
-ds.create_tensor(name='my_images', htype='image', sample_compression='jpg')
+# Create tensors (columns)
+ds.create_tensor('my_images', htype='image', sample_compression='jpg')
 ds.create_tensor('labels', htype='generic', dtype='int')
 ds.create_tensor('categories', htype='text')
 ds.create_tensor('description', htype='text')
 
 # Append data
 with ds:
-    ds.my_images.extend([muller.read(img_path_0), muller.read(img_path_1), muller.read(img_path_2), muller.read(img_path_3), muller.read(img_path_4)])
-    ds.labels.extend([0, 1, 2, 3, 4])
-    ds.categories.extend(["cat", "cat", "dog", "dog", "rabbit"])
-    ds.description.extend(["A majestic long-haired Maine Coon cat perched on a wooden bookshelf, staring intently at a tree outside with its bright amber eyes.", 
-                           "A domestic short-hair cat with a distinctive tuxedo pattern stretching lazily across a velvet sofa in a dimly lit living room.", 
-                           "An energetic Golden Retriever with bright amber eyes sprinting across a vibrant green meadow, its fur glistening under the afternoon sun as it chases a bright yellow tennis ball.", 
-                           "A focused German Shepherd sitting patiently on a cobblestone street, wearing a professional service harness and looking up at its handler for the next command.", 
-                           "A soft, white lop-eared rabbit with bright eyes nestled in a patch of clover, twitching its pink nose while nibbling on a fresh garden carrot."])
+    ds.my_images.extend([muller.read(img_path_0), muller.read(img_path_1), muller.read(img_path_2)])
+    ds.labels.extend([0, 1, 2])
+    ds.categories.extend(["cat", "cat", "dog"])
+    ds.description.extend([
+        "A majestic Maine Coon cat perched on a wooden bookshelf",
+        "A tuxedo cat stretching lazily across a velvet sofa",
+        "A Golden Retriever sprinting across a green meadow"
+    ])
 
-```
-
-#### 2. Data Exploration and Analysis
-```python
-# Check the metadata and schema of the dataset
+# Explore data
 ds.summary()
-
-# Investigate the details of data
-ds.lables[2:4].numpy()
-ds.my_images[3].numpy()
+ds.labels[0:2].numpy()
+ds.my_images[1].numpy()
 ```
 
-#### 3. Data Query
-MULLER provides a comprehensive suite of query functionalities tailored for AI data lakes:
-* Comparison Operators: Supports exact and range matching using `>`,`<`, `>=`, and `<=` for numerical types (`int`/`float`) where the tensor htype is generic.
-* Equality and Inequality: Supports `==` and `!=` for `int`, `float`, `str`, and `bool` types (`generic` or `text` htypes). Users can optionally build inverted indexes to significantly accelerate retrieval performance.
-* Full-Text Search: Supports the `CONTAINS` operator for `str` types (`text` htype), backed by an inverted index. For Chinese text, tokenization is handled by the open-source Jieba tokenizer.
-* Pattern Matching: Supports `LIKE` for regular expression matching on `str` types (`text` htype).
-* Boolean Logic: Supports complex query compositions using `AND`, `OR`, and `NOT` logical connectors.
-* Pagination: Supports query results with `OFFSET` and `LIMIT` clauses for efficient data sampling.
-* Data Aggregation: Supports standard SQL-like aggregation workflows, including `SELECT`, `GROUP BY`, and `ORDER BY`, alongside aggregate functions such as `COUNT`, `AVG`, `MIN`, `MAX`, and `SUM`.
-* Vector Similarity Search: Supports high-dimensional vector similarity retrieval based on IVFPQ, HNSW and DISKANN for AI-centric embedding analysis.
+### Query Data
+
+MULLER provides comprehensive query capabilities:
 
 ```python
-# Example 1: Full-text search (inverted index construction needed)
-ds.commit() # Before creating index, you must commit the data modification.
+# Full-text search (requires inverted index)
+ds.commit()
 ds.create_index_vectorized("description")
-res = ds.filter_vectorized([("description", "CONTAINS", "bright eyes")])
-```
+res = ds.filter_vectorized([("description", "CONTAINS", "cat")])
 
-```python
-# Example 2: Exact macth and complex query compositions
+# Comparison and complex queries
 res_1 = ds.filter_vectorized([("labels", ">", 1)])
 res_2 = ds.filter_vectorized([("description", "LIKE", "ca[t]")])
-res_3 = ds.filter_vectorized([("labels", "<", 2)], ["NOT"])
-res_4 = ds.filter_vectorized([("description", "CONTAINS", "cat"), ("labels", "<", 4)],  ["AND"])
-res_5 = ds.filter_vectorized([("description", "CONTAINS", "bright eyes"), ("labels", "<", 4)],  ["OR"], offset=2, limit=1)
-```
+res_3 = ds.filter_vectorized([("description", "CONTAINS", "cat"), ("labels", "<", 4)], ["AND"])
 
-```python
-# Example 3: Aggregation
-res_6 = ds.aggregate_vectorized(
-        group_by_tensors=['categories'],
-        selected_tensors=['labels', 'categories'],
-        order_by_tensors=['labels'],
-        aggregate_tensors=["*"],)
-```
+# Aggregation
+res_4 = ds.aggregate_vectorized(
+    group_by_tensors=['categories'],
+    selected_tensors=['labels', 'categories'],
+    aggregate_tensors=["*"]
+)
 
-```python
-# Example 4: Vector search
-
-# Create a sample dataset
+# Vector similarity search
 import numpy as np
-ds_vec = muller.dataset(path="test_data_vec/", overwrite=True)
-ds_vec.create_tensor(name="embeddings", htype="vector", dtype="float32", dimension=32)
-ds_vec.embeddings.extend(np.random.rand(320000).reshape(10000, 32).astype(np.float32))
+ds_vec = muller.dataset(path="test_vec/", overwrite=True)
+ds_vec.create_tensor("embeddings", htype="vector", dtype="float32", dimension=32)
+ds_vec.embeddings.extend(np.random.rand(10000, 32).astype(np.float32))
 
-# Create index
 ds_vec.commit()
-ds_vec.create_vector_index("embeddings", index_name="flat", index_type="FLAT", metric="l2")
-ds_vec.create_vector_index("embeddings", index_name="hnsw", index_type="HNSWFLAT", metric="l2", ef_construction=40, m=32)
-
-# Vector search
-q = np.random.rand(1000, 32)
-ds_vec.load_vector_index("embeddings", index_name="flat")
-res_7 = ds_vec.vector_search(query_vector=q, tensor_name="embeddings", index_name="flat", topk=1)
-_, ground_truth = res_7
-
+ds_vec.create_vector_index("embeddings", index_name="hnsw", index_type="HNSWFLAT", metric="l2")
 ds_vec.load_vector_index("embeddings", index_name="hnsw")
-res_8 = ds_vec.vector_search(query_vector=q, tensor_name="embeddings", index_name="hnsw", ef_search=16)
-_, res_id = res_8
 
-# Compute the recall
-recall = np.ones(len(res_id))[(ground_truth==res_id).flatten()].sum() / len(res_id)
+query = np.random.rand(100, 32)
+distances, indices = ds_vec.vector_search(query_vector=query, tensor_name="embeddings", index_name="hnsw", topk=10)
 ```
 
-#### 4. Collaborative Data Annotation based on Git-like versioning
+### Version Control
 
-1. Checkout a new branch (dev-1), and conduct data annotations (append/pop/update). Note: The annotation may be assisted by LLMs.
 ```python
-ds = muller.load(path="test_dataset@main") # You can use `@` to denote the target branch
+# Create and switch branches
+ds = muller.load("test_dataset@main")
 ds.checkout("dev-1", create=True)
-# Append rows
-ds.my_images.extend([muller.read(img_path_50), muller.read(img_path_60), muller.read(img_path_70)])
-ds.labels.extend([50, 60, 70])
-ds.categories.extend(["cat", "bird", "cat"])
-ds.description.extend(["An inquisitive ginger tabby cat standing on its hind legs, reaching out with its paws toward a feathered toy during an active play session.", 
-                       "A sleek all-black cat curled up in a deep sleep on a soft, cream-colored fleece blanket, enjoying a quiet afternoon nap in a cozy indoor setting.", 
-                       "A vibrant Macaw with brilliant red, blue, and yellow plumage, perched firmly on a weathered wooden branch while looking curiously into the distance."])
-# Update rows
-ds.labels[3] = 30
-# Delete rows
-ds.pop(1)
+
+# Make changes
+ds.my_images.extend([muller.read(img_path_5)])
+ds.labels.extend([5])
+ds.categories.extend(["bird"])
+ds.description.extend(["A vibrant Macaw perched on a wooden branch"])
+ds.labels[2] = 20  # Update existing row
+ds.pop(0)  # Delete row
+
+ds.commit('Added bird samples')
+
+# Merge branches
+ds.checkout('main')
+ds.merge('dev-1')
+
+# View history and diff
+ds.log()
+ds.diff(id_1="main", id_2="dev-1")
+```
+
+For complete API documentation, see [MULLER API Reference](https://the-ai-framework-and-data-tech-lab-hk.github.io/MULLER/api/top-level-functions/).
+
+## Advanced Topics
+
+### Collaborative Data Annotation Workflow
+
+This example demonstrates a complete collaborative workflow with multiple branches, conflict detection, and three-way merges:
+
+**1. Create branch dev-1 and make changes:**
+```python
+ds = muller.load("test_dataset@main")
+ds.checkout("dev-1", create=True)
+
+# Append, update, delete
+ds.my_images.extend([muller.read(img_path_50), muller.read(img_path_60)])
+ds.labels.extend([50, 60])
+ds.categories.extend(["cat", "bird"])
+ds.description.extend(["An inquisitive ginger tabby cat", "A sleek all-black cat"])
+ds.labels[3] = 30  # Update
+ds.pop(1)  # Delete
 ds.commit('commit on dev-1')
 ```
 
-2. Go back to the main branch, then checkout a new branch (dev-2), and conduct data annotations (append/pop/update). Note: The annotation may be assisted by LLMs.
+**2. Create branch dev-2 with different changes:**
 ```python
-ds = muller.load(path="test_dataset@main")
+ds = muller.load("test_dataset@main")
 ds.checkout("dev-2", create=True)
-# Append rows
-ds.my_images.extend([muller.read(img_path_500), muller.read(img_path_600), muller.read(img_path_700), muller.read(img_path_800)])
-ds.labels.extend([500, 600, 700, 800])
-ds.categories.extend(["cat", "cat", "dog", "bird"])
-ds.description.extend(["A fluffy orange tabby cat lounges lazily in a sunny window, its green eyes half-closed in contentment.",
-                          "Two playful kittens chase each other across the living room floor, their tiny paws pattering on the hardwood.",
-                          "A golden retriever bounds through the park with a tennis ball in its mouth, tail wagging enthusiastically.",
-                          "A vibrant blue jay perches on a snow-covered branch, its colorful feathers contrasting beautifully against the white winter landscape."])
-# Update rows
-ds.labels[3] = 300
-ds.labels[4] = 400
-# Delete rows
-ds.pop([1, 2])
+
+ds.my_images.extend([muller.read(img_path_500), muller.read(img_path_600)])
+ds.labels.extend([500, 600])
+ds.categories.extend(["cat", "dog"])
+ds.description.extend(["A fluffy orange tabby", "A golden retriever"])
+ds.labels[3] = 300  # Conflicting update
+ds.pop([1, 2])  # Different deletes
 ds.commit('commit on dev-2')
 ```
 
-3. Fast-forward merge: on the main branch, we merge dev-1. Note: we adopt the pop operations in dev-1.
+**3. Fast-forward merge dev-1:**
 ```python
 ds.checkout('main')
 ds.merge('dev-1', pop_resolution='theirs')
 ```
 
-4. Three-way merge: check the diff between the main branch and dev-1 branch, then merge the dev-2 branch
+**4. Three-way merge dev-2 with conflict resolution:**
 ```python
-from pprint import pprint
+# Detect conflicts
 conflict_cols, conflict_records = ds.detect_merge_conflict("dev-2", show_value=True)
-pprint(conflict_records)
 
-ds.merge("dev-2", append_resolution="both", pop_resolution="ours", update_resolution="theirs")
+# Merge with resolution strategy
+ds.merge("dev-2",
+         append_resolution="both",      # Keep appends from both branches
+         pop_resolution="ours",          # Keep our deletes
+         update_resolution="theirs")     # Use their updates
 ```
 
-5. Schema isolation: on the main branch, create a new branch dev-3, and add a column.
+**5. Schema evolution across branches:**
 ```python
 import numpy as np
-with ds:
-    ds.checkout("dev-3", create=True)
-    # Note: dev-3 has one more column than the main branch. The schemas of dev-3 and main are isolated.
-    ds.create_tensor("features", htype="generic", dtype="float")
-    ds.features.extend(np.arange(0, 1.1, 0.1))
-    ds.commit()
+ds.checkout("dev-3", create=True)
+ds.create_tensor("features", htype="generic", dtype="float")
+ds.features.extend(np.arange(0, 1.1, 0.1))
+ds.commit()
 
 ds.checkout("main")
-ds.merge("dev-3") # Now the main branch has the same number of columns as dev-3
+ds.merge("dev-3")  # Schema propagates to main
 ```
 
-6. Check the log and diff between branches or commits
+**6. View history and diffs:**
 ```python
 ds.log()
 ds.branches
@@ -338,6 +289,6 @@ ds.diff(id_1="dev-1", id_2="dev-2")
 ds.direct_diff(id_1="dev-1", id_2="dev-2", as_dataframe=True)
 ```
 
-## Reproduction steps for the experiment results in our paper
+## Research & Reproduction
 
-Please refer to [exp_scripts/README.md](https://github.com/spencerr221/MULLER/blob/main/exp_scripts/README.md) for the detailed steps.
+To reproduce the experiment results from our paper, see [exp_scripts/README.md](https://github.com/spencerr221/MULLER/blob/main/exp_scripts/README.md).
