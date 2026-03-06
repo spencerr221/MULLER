@@ -18,8 +18,22 @@ To address this gap, we introduce **MULLER**, a novel Multimodal data lake forma
 * **Seamless integration with LLM/MLLM data training and processing pipelines**.
 
 Here is a [video demo](https://www.youtube.com/watch?v=okHzhbp7an0) of MULLER to demonstrate the basic functions.
-
 Please check the tutorial at [MULLER website](https://the-ai-framework-and-data-tech-lab-hk.github.io/MULLER/) with [detailed API documents](https://the-ai-framework-and-data-tech-lab-hk.github.io/MULLER/api/top-level-functions/).
+
+---
+
+### 🤖 Natural Language Interface with Agent Skills
+
+MULLER includes [Agent Skills](https://agentskills.io) that let you manage datasets through natural language when using **Claude Code** or compatible AI coding assistants. Simply describe what you want—no need to remember API calls or command syntax!
+
+**Quick examples:**
+- "Create an image classification dataset with jpg compression"
+- "Commit my changes with message 'Added 100 samples'"
+- "Find the top 10 most similar vectors to my query"
+- "Export my dataset to Parquet format"
+
+👉 See the [Agent Skills section](#agent-skills-natural-language-interface) below for full details.
+---
 
 ## Getting Started
 
@@ -63,7 +77,75 @@ import muller
 print(muller.__version__)
 ```
 
-## Examples
+## Agent Skills (Natural Language Interface)
+
+MULLER includes [Agent Skills](https://agentskills.io) integration that allows you to manage datasets through natural language when using **Claude Code** or compatible AI coding assistants.
+
+**Note:** These skills are located in the `.claude/skills/` directory and follow Claude Code's Agent Skills format. Other IDEs like Cursor or Windsurf may require different integration approaches (e.g., `.cursorrules` for Cursor). The skills are currently optimized for Claude Code.
+
+### Available Skills
+
+**1. muller-dataset** - Basic dataset operations
+- Create and manage datasets
+- Add, update, delete data
+- Query and filter samples
+- Inspect dataset information
+
+**2. muller-version-control** - Git-like version control
+- Commit changes
+- Create and merge branches
+- View history and diffs
+- Conflict resolution
+
+**3. muller-advanced-query** - Advanced querying
+- Create indexes (inverted, vector)
+- Vector similarity search
+- Aggregation queries
+- Complex filtering
+
+**4. muller-export** - Export and integration
+- Export to Arrow, Parquet, JSON
+- Convert to NumPy arrays
+- Export to MindRecord (MindSpore)
+- Framework integration
+
+### Usage Examples
+
+Simply describe what you want in natural language:
+
+**Basic Operations:**
+- **"Create an image classification dataset at ./my_photos with jpg compression and uint32 labels"**
+- **"Add all images from the ./data/ folder to my dataset"**
+- **"Show me all samples where label equals 5"**
+- **"Get statistics and summary for my dataset"**
+
+**Version Control:**
+- **"Commit my dataset changes with message 'Added 100 new samples'"**
+- **"Create a new branch called dev-1 for my dataset"**
+- **"Merge the dev-1 branch into main"**
+- **"Show me the commit history"**
+
+**Advanced Queries:**
+- **"Create a vector index for embeddings using HNSW"**
+- **"Find the top 10 most similar vectors to my query"**
+- **"Create an inverted index for text search on descriptions"**
+- **"Aggregate data by category and count samples"**
+
+**Export & Integration:**
+- **"Export my dataset to Parquet format"**
+- **"Convert the embeddings tensor to NumPy array"**
+- **"Export dataset to JSON for my web API"**
+- **"Export to Arrow format for data sharing"**
+
+The AI agent will automatically execute the appropriate MULLER operations. No need to remember API calls or command syntax!
+
+For more details, see:
+- [.claude/skills/muller-dataset/](.claude/skills/muller-dataset/)
+- [.claude/skills/muller-version-control/](.claude/skills/muller-version-control/)
+- [.claude/skills/muller-advanced-query/](.claude/skills/muller-advanced-query/)
+- [.claude/skills/muller-export/](.claude/skills/muller-export/)
+
+## Coding Examples (Pythonn Interface)
 #### 1. Create a MULLER Dataset
 * Note: MULLER support 12+ data types of different modalities, including scalars, vectors, text, images, videos, and audio, with 20+ compression formats (e.g., LZ4, JPG, PNG, MP3, MP4, AVI, WAV).
 
