@@ -1,3 +1,11 @@
+# SPDX-License-Identifier: MPL-2.0
+#
+# This Source Code Form is subject to the terms of the Mozilla Public
+# License, v. 2.0. If a copy of the MPL was not distributed with this
+# file, You can obtain one at https://mozilla.org/MPL/2.0/.
+#
+# Copyright (c) 2026 Xueling Lin
+
 """
 MULLER Streamlit Demo - Interactive Multimodal Data Lake Management
 
@@ -9,6 +17,8 @@ This demo showcases MULLER's capabilities:
 """
 import streamlit as st
 import sys
+import os
+import tempfile
 from pathlib import Path
 
 # Ensure project root is on sys.path so `import muller` works
@@ -299,17 +309,53 @@ if page == "📊 Dataset Management":
                     if unmatched:
                         st.warning(f"Columns not in dataset (will be skipped): {unmatched}")
 
+                    # Let users mark columns containing file paths
+                    media_cols = [
+                        col for col in matched
+                        if ds.tensors[col].htype in ("image", "video", "audio")
+                    ]
+                    path_columns = {}
+                    if media_cols:
+                        st.markdown("**Path columns** — these columns have media htypes. "
+                                    "If their CSV values are file paths, select how to handle them:")
+                        for col in media_cols:
+                            mode = st.selectbox(
+                                f"`{col}` ({ds.tensors[col].htype})",
+                                options=["read", "text", "skip"],
+                                help="read: load file via muller.read(); "
+                                     "text: store path as text; "
+                                     "skip: treat as plain value",
+                                key=f"csv_pathcol_{col}",
+                            )
+                            if mode != "skip":
+                                path_columns[col] = mode
+
                     if st.button("Import CSV Data"):
-                        data = {col: df_up[col].tolist() for col in matched}
-                        if not data:
+                        if not matched:
                             st.error(f"CSV columns must match tensors: {tensor_names}")
                         else:
-                            err = add_samples(ds, data, auto_commit=True)
-                            if err:
-                                st.error(err)
-                            else:
+                            tmp_path = None
+                            try:
+                                # Save uploaded file to a temp path for ds.add_data_from_csv()
+                                with tempfile.NamedTemporaryFile(
+                                    suffix=".csv", delete=False, mode="wb"
+                                ) as tmp:
+                                    tmp.write(uploaded.getvalue())
+                                    tmp_path = tmp.name
+
+                                ds.add_data_from_csv(
+                                    csv_path=tmp_path,
+                                    path_columns=path_columns if path_columns else None,
+                                    workers=0,
+                                )
+                                commit_dataset(ds, message="Import CSV data via Streamlit UI")
                                 st.success(f"Imported {len(df_up)} samples.")
                                 st.rerun()
+                            except Exception as e:
+                                st.error(f"Failed to import CSV: {e}")
+                            finally:
+                                if tmp_path and os.path.exists(tmp_path):
+                                    os.unlink(tmp_path)
 
     # --- Tab 3: View & Edit ---
     with tab_view:
