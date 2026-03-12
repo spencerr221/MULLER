@@ -95,34 +95,111 @@ if page == "📊 Dataset Management":
     with tab_create:
         col_left, col_right = st.columns(2)
 
+        # ---- Create New Dataset (left column) ----
         with col_left:
             st.subheader("Create New Dataset")
             ds_name = st.text_input("Dataset Name", value="demo_dataset", key="create_name")
             ds_root = st.text_input("Root Directory", value=str(Path.home() / "muller_datasets"), key="create_root")
             overwrite = st.checkbox("Overwrite if exists", value=False)
 
-            if st.button("Create Dataset", type="primary"):
-                with st.spinner("Creating dataset..."):
-                    ds, error = create_dataset(ds_name, ds_root, overwrite=overwrite)
-                    if error:
-                        st.error(error)
-                    else:
-                        schema = {
-                            "labels":      {"htype": "generic", "dtype": "int64"},
-                            "categories":  {"htype": "text"},
-                            "description": {"htype": "text"},
-                        }
-                        err = create_tensors(ds, schema)
-                        if err:
-                            st.error(err)
-                        else:
-                            ds.commit(message="Initial schema creation")
-                            st.session_state.dataset = ds
-                            st.session_state.dataset_path = str(Path(ds_root) / ds_name)
-                            st.session_state.current_branch = "main"
-                            st.success(f"Dataset created at: {st.session_state.dataset_path}")
+            # --- Dynamic schema definition ---
+            HTYPE_OPTIONS = ["generic", "text", "image", "video", "audio", "embedding", "class_label", "json"]
+            DTYPE_OPTIONS = ["(auto)", "int32", "int64", "float32", "float64", "uint8", "bool", "str"]
+            COMPRESSION_OPTIONS = ["(none)", "lz4", "jpg", "png", "mp4", "mp3", "wav"]
+
+            st.markdown("**Define Columns (Tensors)**")
+
+            # Each row is tracked by a unique ID so insert/delete anywhere is safe.
+            _DEFAULT_ROWS = [
+                {"id": 0, "name": "labels",      "htype": "generic", "dtype": "int64",  "comp": "(none)"},
+                {"id": 1, "name": "categories",  "htype": "text",    "dtype": "(auto)",  "comp": "(none)"},
+                {"id": 2, "name": "description", "htype": "text",    "dtype": "(auto)",  "comp": "(none)"},
+            ]
+            if "schema_rows" not in st.session_state:
+                st.session_state.schema_rows = list(_DEFAULT_ROWS)
+            if "schema_next_id" not in st.session_state:
+                st.session_state.schema_next_id = len(_DEFAULT_ROWS)
+
+            # Header row
+            h_name, h_htype, h_dtype, h_comp, h_btns = st.columns([3, 2, 2, 2, 1])
+            h_name.markdown("**Name**")
+            h_htype.markdown("**htype**")
+            h_dtype.markdown("**dtype**")
+            h_comp.markdown("**compress**")
+            h_btns.markdown("**+/−**")
+
+            schema_inputs = []
+            rows = st.session_state.schema_rows
+            for pos, row in enumerate(rows):
+                rid = row["id"]
+                c_name, c_htype, c_dtype, c_comp, c_btns = st.columns([3, 2, 2, 2, 1])
+                with c_name:
+                    col_name = st.text_input("n", value=row["name"], key=f"col_name_{rid}",
+                                             label_visibility="collapsed")
+                with c_htype:
+                    col_htype = st.selectbox("h", HTYPE_OPTIONS,
+                                             index=HTYPE_OPTIONS.index(row["htype"]) if row["htype"] in HTYPE_OPTIONS else 0,
+                                             key=f"col_htype_{rid}", label_visibility="collapsed")
+                with c_dtype:
+                    col_dtype = st.selectbox("d", DTYPE_OPTIONS,
+                                             index=DTYPE_OPTIONS.index(row["dtype"]) if row["dtype"] in DTYPE_OPTIONS else 0,
+                                             key=f"col_dtype_{rid}", label_visibility="collapsed")
+                with c_comp:
+                    col_comp = st.selectbox("c", COMPRESSION_OPTIONS,
+                                            index=COMPRESSION_OPTIONS.index(row["comp"]) if row["comp"] in COMPRESSION_OPTIONS else 0,
+                                            key=f"col_comp_{rid}", label_visibility="collapsed")
+                with c_btns:
+                    b1, b2 = st.columns(2)
+                    with b1:
+                        if st.button("＋", key=f"add_{rid}", help="Insert a row below"):
+                            new_id = st.session_state.schema_next_id
+                            st.session_state.schema_next_id += 1
+                            rows.insert(pos + 1, {"id": new_id, "name": "", "htype": "generic",
+                                                   "dtype": "(auto)", "comp": "(none)"})
+                            st.rerun()
+                    with b2:
+                        if len(rows) > 1 and st.button("−", key=f"del_{rid}", help="Remove this row"):
+                            rows.pop(pos)
                             st.rerun()
 
+                schema_inputs.append((col_name.strip(), col_htype, col_dtype, col_comp))
+
+            if st.button("Create Dataset", type="primary"):
+                # Validate column names
+                col_names = [s[0] for s in schema_inputs if s[0]]
+                if not col_names:
+                    st.error("Please define at least one column.")
+                elif len(col_names) != len(set(col_names)):
+                    st.error("Column names must be unique.")
+                else:
+                    with st.spinner("Creating dataset..."):
+                        ds, error = create_dataset(ds_name, ds_root, overwrite=overwrite)
+                        if error:
+                            st.error(error)
+                        else:
+                            schema = {}
+                            for name, htype, dtype, comp in schema_inputs:
+                                if not name:
+                                    continue
+                                cfg = {"htype": htype}
+                                if dtype != "(auto)":
+                                    cfg["dtype"] = dtype
+                                if comp != "(none)":
+                                    cfg["sample_compression"] = comp
+                                schema[name] = cfg
+
+                            err = create_tensors(ds, schema)
+                            if err:
+                                st.error(err)
+                            else:
+                                ds.commit(message="Initial schema creation")
+                                st.session_state.dataset = ds
+                                st.session_state.dataset_path = str(Path(ds_root) / ds_name)
+                                st.session_state.current_branch = "main"
+                                st.success(f"Dataset created with columns: {list(schema.keys())}")
+                                st.rerun()
+
+        # ---- Load Existing Dataset (right column) ----
         with col_right:
             st.subheader("Load Existing Dataset")
             load_path = st.text_input("Dataset Path", value="", key="load_path")
@@ -149,14 +226,45 @@ if page == "📊 Dataset Management":
             ds = st.session_state.dataset
             tensor_names = list(ds.tensors.keys())
 
+            # Show current schema for reference
+            with st.expander("Current Schema", expanded=False):
+                schema_rows = []
+                for tname, t in ds.tensors.items():
+                    schema_rows.append({"Column": tname, "htype": t.htype, "dtype": str(t.dtype)})
+                st.dataframe(pd.DataFrame(schema_rows), use_container_width=True, hide_index=True)
+
             with st.expander("Add Single Sample", expanded=True):
                 sample_data = {}
                 for tname in tensor_names:
                     t = ds.tensors[tname]
-                    if t.htype == "text":
-                        sample_data[tname] = [st.text_input(f"{tname}", key=f"add_{tname}")]
+                    htype = t.htype
+                    dtype_str = str(t.dtype)
+
+                    if htype == "text":
+                        sample_data[tname] = [st.text_input(f"{tname} (text)", key=f"add_{tname}")]
+                    elif htype in ("image", "video", "audio"):
+                        file_types = {"image": ["jpg", "png", "jpeg", "bmp"],
+                                      "video": ["mp4", "avi", "mov"],
+                                      "audio": ["mp3", "wav", "flac"]}
+                        uploaded_file = st.file_uploader(
+                            f"{tname} ({htype})", type=file_types.get(htype, []),
+                            key=f"add_{tname}")
+                        if uploaded_file is not None:
+                            sample_data[tname] = [np.frombuffer(uploaded_file.read(), dtype=np.uint8)]
+                        else:
+                            sample_data[tname] = None  # will skip
+                    elif "int" in dtype_str:
+                        val = st.number_input(f"{tname} (integer)", value=0, step=1, key=f"add_{tname}")
+                        sample_data[tname] = [int(val)]
+                    elif "float" in dtype_str:
+                        val = st.number_input(f"{tname} (float)", value=0.0, key=f"add_{tname}")
+                        sample_data[tname] = [float(val)]
+                    elif "bool" in dtype_str:
+                        val = st.checkbox(f"{tname} (bool)", key=f"add_{tname}")
+                        sample_data[tname] = [val]
                     else:
-                        val = st.text_input(f"{tname} (number)", value="0", key=f"add_{tname}")
+                        # Fallback: text input with auto type conversion
+                        val = st.text_input(f"{tname}", key=f"add_{tname}")
                         try:
                             sample_data[tname] = [int(val)]
                         except ValueError:
@@ -166,20 +274,33 @@ if page == "📊 Dataset Management":
                                 sample_data[tname] = [val]
 
                 if st.button("Add Sample", type="primary"):
-                    err = add_samples(ds, sample_data, auto_commit=True)
-                    if err:
-                        st.error(err)
+                    # Filter out None entries (e.g. file not uploaded)
+                    filtered = {k: v for k, v in sample_data.items() if v is not None}
+                    if not filtered:
+                        st.error("Please fill in at least one field.")
                     else:
-                        st.success("Sample added and committed.")
-                        st.rerun()
+                        err = add_samples(ds, filtered, auto_commit=True)
+                        if err:
+                            st.error(err)
+                        else:
+                            st.success("Sample added and committed.")
+                            st.rerun()
 
             with st.expander("Batch Upload (CSV)"):
                 uploaded = st.file_uploader("Choose CSV file", type=["csv"])
                 if uploaded is not None:
                     df_up = pd.read_csv(uploaded)
                     st.dataframe(df_up.head(), use_container_width=True)
+
+                    matched = [col for col in df_up.columns if col in tensor_names]
+                    unmatched = [col for col in df_up.columns if col not in tensor_names]
+                    if matched:
+                        st.info(f"Matched columns: {matched}")
+                    if unmatched:
+                        st.warning(f"Columns not in dataset (will be skipped): {unmatched}")
+
                     if st.button("Import CSV Data"):
-                        data = {col: df_up[col].tolist() for col in df_up.columns if col in tensor_names}
+                        data = {col: df_up[col].tolist() for col in matched}
                         if not data:
                             st.error(f"CSV columns must match tensors: {tensor_names}")
                         else:

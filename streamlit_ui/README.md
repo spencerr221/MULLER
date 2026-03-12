@@ -37,6 +37,8 @@ This will install:
 
 ## Running the Demo
 
+> **Tip:** If the page shows "localhost refused to connect", first kill any leftover processes with `pkill -f streamlit`, then restart.
+
 ### Option 1: Using the launcher script (recommended)
 
 ```bash
@@ -46,15 +48,18 @@ cd streamlit_ui
 
 ### Option 2: Direct command
 
-From the project root:
 ```bash
-streamlit run streamlit_ui/demo_streamlit.py
-```
+# 1. Kill any leftover Streamlit processes
+pkill -f streamlit
 
-Or from the `streamlit_ui` directory:
-```bash
+# 2. Confirm port 8501 is free
+lsof -i :8501
+
+# 3. Launch from the streamlit_ui directory
 cd streamlit_ui
-streamlit run demo_streamlit.py
+python3 -m streamlit run demo_streamlit.py --server.headless true
+
+# 4. Wait until you see "Local URL: http://localhost:8501", then open the URL in your browser
 ```
 
 The application will open in your default browser at `http://localhost:8501`.
