@@ -30,7 +30,9 @@ from utils import (
     create_dataset, create_tensors, add_samples, update_sample, delete_sample,
     run_query, dataset_to_dataframe, branch_ops, benchmark_parquet_vs_muller,
     load_dataset, commit_dataset, get_dataset_info,
+    build_commit_graph_data, render_commit_graph_html,
 )
+import streamlit.components.v1 as components
 import pandas as pd
 import numpy as np
 
@@ -241,7 +243,7 @@ if page == "📊 Dataset Management":
                 schema_rows = []
                 for tname, t in ds.tensors.items():
                     schema_rows.append({"Column": tname, "htype": t.htype, "dtype": str(t.dtype)})
-                st.dataframe(pd.DataFrame(schema_rows), use_container_width=True, hide_index=True)
+                st.dataframe(pd.DataFrame(schema_rows), width="stretch", hide_index=True)
 
             with st.expander("Add Single Sample", expanded=True):
                 sample_data = {}
@@ -264,11 +266,17 @@ if page == "📊 Dataset Management":
                         else:
                             sample_data[tname] = None  # will skip
                     elif "int" in dtype_str:
-                        val = st.number_input(f"{tname} (integer)", value=0, step=1, key=f"add_{tname}")
-                        sample_data[tname] = [int(val)]
+                        val = st.text_input(f"{tname} (integer)", value="0", key=f"add_{tname}")
+                        try:
+                            sample_data[tname] = [int(val)]
+                        except ValueError:
+                            sample_data[tname] = [0]
                     elif "float" in dtype_str:
-                        val = st.number_input(f"{tname} (float)", value=0.0, key=f"add_{tname}")
-                        sample_data[tname] = [float(val)]
+                        val = st.text_input(f"{tname} (float)", value="0.0", key=f"add_{tname}")
+                        try:
+                            sample_data[tname] = [float(val)]
+                        except ValueError:
+                            sample_data[tname] = [0.0]
                     elif "bool" in dtype_str:
                         val = st.checkbox(f"{tname} (bool)", key=f"add_{tname}")
                         sample_data[tname] = [val]
@@ -300,7 +308,7 @@ if page == "📊 Dataset Management":
                 uploaded = st.file_uploader("Choose CSV file", type=["csv"])
                 if uploaded is not None:
                     df_up = pd.read_csv(uploaded)
-                    st.dataframe(df_up.head(), use_container_width=True)
+                    st.dataframe(df_up.head(), width="stretch")
 
                     matched = [col for col in df_up.columns if col in tensor_names]
                     unmatched = [col for col in df_up.columns if col not in tensor_names]
@@ -379,7 +387,7 @@ if page == "📊 Dataset Management":
                 if err:
                     st.error(err)
                 else:
-                    st.dataframe(df, use_container_width=True)
+                    st.dataframe(df, width="stretch")
 
                 with st.expander("Delete Sample"):
                     del_idx = st.number_input("Sample Index", min_value=0, max_value=max(n - 1, 0), value=0)
@@ -430,26 +438,50 @@ elif page == "🔍 Query & Search":
         with tab_filter:
             st.subheader("Conditional Filtering")
 
-            # Allow multiple conditions
-            num_conds = st.number_input("Number of conditions", 1, 5, 1, key="num_conds")
+            # Dynamic condition list tracked by unique IDs
+            if "filter_cond_ids" not in st.session_state:
+                st.session_state.filter_cond_ids = [0]
+                st.session_state.filter_next_id = 1
 
             conditions = []
             connectors = []
-            for i in range(num_conds):
-                cols = st.columns([3, 2, 3, 2] if i > 0 else [3, 2, 3])
-                idx = 0
-                if i > 0:
-                    with cols[0]:
-                        conn = st.selectbox("Logic", ["AND", "OR"], key=f"conn_{i}")
+            cond_ids = st.session_state.filter_cond_ids
+            for pos, cid in enumerate(cond_ids):
+                if pos == 0:
+                    c_field, c_op, c_val, c_btn = st.columns([3, 2, 3, 1])
+                else:
+                    c_conn, c_field, c_op, c_val, c_btn = st.columns([1, 3, 2, 3, 1])
+                    with c_conn:
+                        conn = st.selectbox("Logic", ["AND", "OR"], key=f"conn_{cid}",
+                                            label_visibility="collapsed")
                         connectors.append(conn)
-                    idx = 1
 
-                with cols[idx]:
-                    field = st.selectbox("Field", tensor_names, key=f"field_{i}")
-                with cols[idx + 1]:
-                    op = st.selectbox("Op", ["==", "!=", ">", "<", ">=", "<=", "CONTAINS", "LIKE"], key=f"op_{i}")
-                with cols[idx + 2]:
-                    val = st.text_input("Value", key=f"val_{i}")
+                with c_field:
+                    field = st.selectbox("Field" if pos == 0 else "Field",
+                                         tensor_names, key=f"field_{cid}",
+                                         label_visibility="collapsed" if pos > 0 else "visible")
+                with c_op:
+                    op = st.selectbox("Op" if pos == 0 else "Op",
+                                      ["==", "!=", ">", "<", ">=", "<=", "CONTAINS", "LIKE"],
+                                      key=f"op_{cid}",
+                                      label_visibility="collapsed" if pos > 0 else "visible")
+                with c_val:
+                    val = st.text_input("Value" if pos == 0 else "Value",
+                                        key=f"val_{cid}",
+                                        label_visibility="collapsed" if pos > 0 else "visible")
+                with c_btn:
+                    if pos == 0:
+                        # Spacer to align with label row, then ＋ button
+                        st.markdown("<div style='height:29px'></div>", unsafe_allow_html=True)
+                        if st.button("＋", key="add_cond", help="Add condition"):
+                            new_id = st.session_state.filter_next_id
+                            st.session_state.filter_next_id += 1
+                            cond_ids.append(new_id)
+                            st.rerun()
+                    else:
+                        if st.button("−", key=f"del_cond_{cid}", help="Remove this condition"):
+                            cond_ids.remove(cid)
+                            st.rerun()
 
                 conditions.append((field, op, val))
 
@@ -470,6 +502,24 @@ elif page == "🔍 Query & Search":
                             pass
                     parsed_conds.append((field, op, val))
 
+                # Auto-create inverted index for CONTAINS queries if missing
+                for field, op, val in parsed_conds:
+                    if op == "CONTAINS":
+                        branch = ds.version_state["branch"]
+                        meta_path = f"inverted_index_dir_vec/{branch}/meta.json"
+                        has_index = False
+                        try:
+                            import json as _json
+                            meta = _json.loads(ds.storage[meta_path].decode("utf-8"))
+                            has_index = field in meta
+                        except KeyError:
+                            pass
+                        if not has_index:
+                            with st.spinner(f"Creating inverted index for '{field}'..."):
+                                if ds.has_head_changes:
+                                    ds.commit(message="Auto-commit before index creation")
+                                ds.create_index_vectorized(field)
+
                 result_ds, err = run_query(ds, parsed_conds, connectors if connectors else None)
                 if err:
                     st.error(err)
@@ -479,7 +529,7 @@ elif page == "🔍 Query & Search":
                     if n_results > 0:
                         df, _ = dataset_to_dataframe(result_ds, end=min(n_results, 200))
                         if df is not None:
-                            st.dataframe(df, use_container_width=True)
+                            st.dataframe(df, width="stretch")
 
         with tab_vector:
             st.subheader("Vector Similarity Search")
@@ -518,12 +568,19 @@ elif page == "🌿 Version Control":
 
             branch_names = list(branches.keys()) if isinstance(branches, dict) else branches
 
-            st.markdown("**Current branches:**")
-            for bname in branch_names:
-                if bname == ds.branch:
-                    st.markdown(f"- **{bname}** ← current")
-                else:
-                    st.markdown(f"- {bname}")
+            # Visual commit graph
+            try:
+                _graph_data = build_commit_graph_data(ds)
+                _graph_html = render_commit_graph_html(_graph_data, height=350)
+                components.html(_graph_html, height=370, scrolling=True)
+            except Exception:
+                # Fallback to markdown
+                st.markdown("**Current branches:**")
+                for bname in branch_names:
+                    if bname == ds.branch:
+                        st.markdown(f"- **{bname}** ← current")
+                    else:
+                        st.markdown(f"- {bname}")
 
             col_create, col_switch = st.columns(2)
 
@@ -598,7 +655,7 @@ elif page == "🌿 Version Control":
                                         for j, idx in enumerate(cdata.get("app_tar_idx", [])):
                                             rows.append({"Index": idx, "Source (theirs)": str(tar_vals[j]) if j < len(tar_vals) else "—"})
                                         if rows:
-                                            st.dataframe(pd.DataFrame(rows), use_container_width=True)
+                                            st.dataframe(pd.DataFrame(rows), width="stretch")
 
                                     # Update conflicts
                                     if cdata.get("update_values"):
@@ -624,7 +681,7 @@ elif page == "🌿 Version Control":
                                                         return ["background-color: #ffcccc"] * len(row)
                                                     return [""] * len(row)
 
-                                                st.dataframe(cdf.style.apply(_hl, axis=1), use_container_width=True)
+                                                st.dataframe(cdf.style.apply(_hl, axis=1), width="stretch")
 
                                     # Delete conflicts
                                     if cdata.get("del_ori_idx") or cdata.get("del_tar_idx"):
@@ -665,18 +722,24 @@ elif page == "🌿 Version Control":
             if st.button("Refresh Log"):
                 st.rerun()
 
-            commits, err = branch_ops(ds, "log")
-            if err:
-                st.error(err)
-            else:
-                if commits:
-                    for c in commits:
-                        if isinstance(c, dict):
-                            st.markdown(f"- `{c.get('commit_id', '?')[:8]}` — {c.get('message', '(no message)')}")
-                        else:
-                            st.markdown(f"- `{str(c)[:8]}`")
+            try:
+                _log_graph_data = build_commit_graph_data(ds)
+                _log_html = render_commit_graph_html(_log_graph_data, height=450)
+                components.html(_log_html, height=470, scrolling=True)
+            except Exception:
+                # Fallback to text log
+                commits, err = branch_ops(ds, "log")
+                if err:
+                    st.error(err)
                 else:
-                    st.info("No commits yet.")
+                    if commits:
+                        for c in commits:
+                            if isinstance(c, dict):
+                                st.markdown(f"- `{c.get('commit', c.get('commit_id', '?'))[:8]}` — {c.get('message', '(no message)')}")
+                            else:
+                                st.markdown(f"- `{str(c)[:8]}`")
+                    else:
+                        st.info("No commits yet.")
 
 
 # ============================================================================
@@ -721,7 +784,7 @@ elif page == "⚡ Benchmarks":
                 if err:
                     st.error(err)
                 else:
-                    st.plotly_chart(fig, use_container_width=True)
+                    st.plotly_chart(fig, width="stretch")
                     st.markdown("""
                     **Key Takeaways:**
                     - MULLER uses chunk-based storage with lazy loading for efficient I/O
