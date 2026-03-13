@@ -101,7 +101,7 @@ else:
 if page == "📊 Dataset Management":
     st.title("📊 Dataset Management")
 
-    tab_create, tab_add, tab_view = st.tabs(["Create / Load", "Add Samples", "View & Edit"])
+    tab_create, tab_view = st.tabs(["Create / Load", "View & Edit"])
 
     # --- Tab 1: Create / Load ---
     with tab_create:
@@ -229,23 +229,41 @@ if page == "📊 Dataset Management":
                         st.success(f"Dataset loaded from: {load_path}")
                         st.rerun()
 
-    # --- Tab 2: Add Samples ---
-    with tab_add:
-        st.subheader("Add Samples")
+    # --- Tab 2: View & Edit ---
+    with tab_view:
+        st.subheader("View & Edit Dataset")
         if st.session_state.dataset is None:
             st.warning("Please create or load a dataset first.")
         else:
             ds = st.session_state.dataset
             tensor_names = list(ds.tensors.keys())
+            n = len(ds)
 
-            # Show current schema for reference
+            # 1) Current Schema (collapsed by default)
             with st.expander("Current Schema", expanded=False):
                 schema_rows = []
                 for tname, t in ds.tensors.items():
                     schema_rows.append({"Column": tname, "htype": t.htype, "dtype": str(t.dtype)})
                 st.dataframe(pd.DataFrame(schema_rows), width="stretch", hide_index=True)
 
-            with st.expander("Add Single Sample", expanded=True):
+            # 2) Dataset details
+            col1, col2, col3 = st.columns(3)
+            col1.metric("Samples", n)
+            col2.metric("Tensors", len(ds.tensors))
+            col3.metric("Branch", ds.branch)
+
+            if n == 0:
+                st.info("Dataset is empty. Add samples below.")
+            else:
+                preview_limit = min(n, 200)
+                df, err = dataset_to_dataframe(ds, end=preview_limit)
+                if err:
+                    st.error(err)
+                else:
+                    st.dataframe(df, width="stretch")
+
+            # 3) Add Single Sample (collapsed by default)
+            with st.expander("Add Single Sample", expanded=False):
                 sample_data = {}
                 for tname in tensor_names:
                     t = ds.tensors[tname]
@@ -264,7 +282,7 @@ if page == "📊 Dataset Management":
                         if uploaded_file is not None:
                             sample_data[tname] = [np.frombuffer(uploaded_file.read(), dtype=np.uint8)]
                         else:
-                            sample_data[tname] = None  # will skip
+                            sample_data[tname] = None
                     elif "int" in dtype_str:
                         val = st.text_input(f"{tname} (integer)", value="0", key=f"add_{tname}")
                         try:
@@ -281,7 +299,6 @@ if page == "📊 Dataset Management":
                         val = st.checkbox(f"{tname} (bool)", key=f"add_{tname}")
                         sample_data[tname] = [val]
                     else:
-                        # Fallback: text input with auto type conversion
                         val = st.text_input(f"{tname}", key=f"add_{tname}")
                         try:
                             sample_data[tname] = [int(val)]
@@ -292,7 +309,6 @@ if page == "📊 Dataset Management":
                                 sample_data[tname] = [val]
 
                 if st.button("Add Sample", type="primary"):
-                    # Filter out None entries (e.g. file not uploaded)
                     filtered = {k: v for k, v in sample_data.items() if v is not None}
                     if not filtered:
                         st.error("Please fill in at least one field.")
@@ -304,7 +320,8 @@ if page == "📊 Dataset Management":
                             st.success("Sample added and committed.")
                             st.rerun()
 
-            with st.expander("Batch Upload (CSV)"):
+            # 4) Batch Upload via CSV (collapsed by default)
+            with st.expander("Batch Upload via CSV", expanded=False):
                 uploaded = st.file_uploader("Choose CSV file", type=["csv"])
                 if uploaded is not None:
                     df_up = pd.read_csv(uploaded)
@@ -317,7 +334,6 @@ if page == "📊 Dataset Management":
                     if unmatched:
                         st.warning(f"Columns not in dataset (will be skipped): {unmatched}")
 
-                    # Let users mark columns containing file paths
                     media_cols = [
                         col for col in matched
                         if ds.tensors[col].htype in ("image", "video", "audio")
@@ -344,7 +360,6 @@ if page == "📊 Dataset Management":
                         else:
                             tmp_path = None
                             try:
-                                # Save uploaded file to a temp path for ds.add_data_from_csv()
                                 with tempfile.NamedTemporaryFile(
                                     suffix=".csv", delete=False, mode="wb"
                                 ) as tmp:
@@ -365,31 +380,11 @@ if page == "📊 Dataset Management":
                                 if tmp_path and os.path.exists(tmp_path):
                                     os.unlink(tmp_path)
 
-    # --- Tab 3: View & Edit ---
-    with tab_view:
-        st.subheader("View & Edit Dataset")
-        if st.session_state.dataset is None:
-            st.warning("Please create or load a dataset first.")
-        else:
-            ds = st.session_state.dataset
-            n = len(ds)
-
-            col1, col2, col3 = st.columns(3)
-            col1.metric("Samples", n)
-            col2.metric("Tensors", len(ds.tensors))
-            col3.metric("Branch", ds.branch)
-
-            if n == 0:
-                st.info("Dataset is empty. Add samples first.")
-            else:
-                preview_limit = min(n, 200)
-                df, err = dataset_to_dataframe(ds, end=preview_limit)
-                if err:
-                    st.error(err)
+            # 5) Delete Sample (collapsed by default)
+            with st.expander("Delete Sample", expanded=False):
+                if n == 0:
+                    st.info("No samples to delete.")
                 else:
-                    st.dataframe(df, width="stretch")
-
-                with st.expander("Delete Sample"):
                     del_idx = st.number_input("Sample Index", min_value=0, max_value=max(n - 1, 0), value=0)
                     if st.button("Delete", type="secondary"):
                         err = delete_sample(ds, del_idx)
@@ -400,7 +395,11 @@ if page == "📊 Dataset Management":
                             st.success(f"Deleted sample {del_idx}")
                             st.rerun()
 
-                with st.expander("Update Sample"):
+            # 6) Update Sample (collapsed by default)
+            with st.expander("Update Sample", expanded=False):
+                if n == 0:
+                    st.info("No samples to update.")
+                else:
                     upd_idx = st.number_input("Sample Index to Update", min_value=0, max_value=max(n - 1, 0), value=0, key="upd_idx")
                     upd_tensor = st.selectbox("Tensor", list(ds.tensors.keys()), key="upd_tensor")
                     upd_val = st.text_input("New Value", key="upd_val")
@@ -555,7 +554,7 @@ elif page == "🌿 Version Control":
     else:
         ds = st.session_state.dataset
 
-        tab_branch, tab_merge, tab_log = st.tabs(["Branches", "Merge & Conflicts", "Commit Log"])
+        tab_branch, tab_merge = st.tabs(["Branches", "Merge & Conflicts"])
 
         # --- Branches ---
         with tab_branch:
@@ -567,6 +566,9 @@ elif page == "🌿 Version Control":
                 st.stop()
 
             branch_names = list(branches.keys()) if isinstance(branches, dict) else branches
+
+            if st.button("Refresh", key="refresh_graph"):
+                st.rerun()
 
             # Visual commit graph
             try:
@@ -716,30 +718,6 @@ elif page == "🌿 Version Control":
                         st.success(res)
                         st.rerun()
 
-        # --- Commit Log ---
-        with tab_log:
-            st.subheader("Commit History")
-            if st.button("Refresh Log"):
-                st.rerun()
-
-            try:
-                _log_graph_data = build_commit_graph_data(ds)
-                _log_html = render_commit_graph_html(_log_graph_data, height=450)
-                components.html(_log_html, height=470, scrolling=True)
-            except Exception:
-                # Fallback to text log
-                commits, err = branch_ops(ds, "log")
-                if err:
-                    st.error(err)
-                else:
-                    if commits:
-                        for c in commits:
-                            if isinstance(c, dict):
-                                st.markdown(f"- `{c.get('commit', c.get('commit_id', '?'))[:8]}` — {c.get('message', '(no message)')}")
-                            else:
-                                st.markdown(f"- `{str(c)[:8]}`")
-                    else:
-                        st.info("No commits yet.")
 
 
 # ============================================================================

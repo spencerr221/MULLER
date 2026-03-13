@@ -262,7 +262,7 @@ def build_commit_graph_data(ds: Any) -> Dict[str, Any]:
 
 
 def render_commit_graph_html(graph_data: Dict[str, Any], height: int = 500) -> str:
-    """Render the commit graph as self-contained HTML with SVG + vanilla JS."""
+    """Render the commit graph as self-contained horizontal HTML with SVG + vanilla JS."""
     import json
     json_data = json.dumps(graph_data)
 
@@ -293,25 +293,27 @@ def render_commit_graph_html(graph_data: Dict[str, Any], height: int = 500) -> s
 <script>
 (function() {{
   const data = {json_data};
-  const LANE_W = 50, ROW_H = 50, R = 8;
-  const LEFT_M = 130, TOP_M = 50;
+  const COL_W = 60, LANE_H = 50, R = 8;
+  const LEFT_M = 80, TOP_M = 20;
   const COLORS = ["#4CAF50","#2196F3","#FF9800","#9C27B0","#F44336","#00BCD4","#795548","#607D8B","#E91E63","#CDDC39"];
+  const N = data.commits ? data.commits.length : 0;
 
-  if (!data.commits || data.commits.length === 0) {{
+  if (N === 0) {{
     document.getElementById("container").innerHTML = '<p style="padding:16px;color:#888;">No commits yet.</p>';
     return;
   }}
 
   const svg = document.getElementById("graph");
   const tooltip = document.getElementById("tooltip");
-  const W = LEFT_M + data.lane_count * LANE_W + 260;
-  const H = TOP_M + data.commits.length * ROW_H + 30;
+  const W = LEFT_M + N * COL_W + 30;
+  const H = TOP_M + data.lane_count * LANE_H + 30;
   svg.setAttribute("width", W);
   svg.setAttribute("height", H);
 
+  // Horizontal layout: x = time axis (oldest left, newest right), y = branch lane
   const pos = {{}};
   data.commits.forEach((c, i) => {{
-    pos[c.id] = {{ x: LEFT_M + c.lane * LANE_W, y: TOP_M + i * ROW_H }};
+    pos[c.id] = {{ x: LEFT_M + (N - 1 - i) * COL_W, y: TOP_M + c.lane * LANE_H }};
   }});
 
   function color(lane) {{ return COLORS[lane % COLORS.length]; }}
@@ -322,30 +324,24 @@ def render_commit_graph_html(graph_data: Dict[str, Any], height: int = 500) -> s
     return el;
   }}
 
-  // Branch labels
+  // Branch labels on the left
   data.branches.forEach(b => {{
-    const x = LEFT_M + b.lane * LANE_W;
+    const y = TOP_M + b.lane * LANE_H;
     const label = svgEl("text", {{
-      x: x, y: 20, "text-anchor": "middle", fill: color(b.lane),
-      "font-size": b.is_current ? "14px" : "12px",
+      x: LEFT_M - 12, y: y + 4, "text-anchor": "end", fill: color(b.lane),
+      "font-size": b.is_current ? "13px" : "11px",
       "font-weight": b.is_current ? "700" : "500",
       "font-family": "-apple-system, BlinkMacSystemFont, sans-serif"
     }});
     label.textContent = b.name + (b.is_current ? " *" : "");
     svg.appendChild(label);
-    if (b.is_current) {{
-      svg.appendChild(svgEl("line", {{
-        x1: x - 20, y1: 24, x2: x + 20, y2: 24,
-        stroke: color(b.lane), "stroke-width": 2
-      }}));
-    }}
   }});
 
-  // Lane guide lines
+  // Horizontal lane guide lines
   data.branches.forEach(b => {{
-    const x = LEFT_M + b.lane * LANE_W;
+    const y = TOP_M + b.lane * LANE_H;
     svg.appendChild(svgEl("line", {{
-      x1: x, y1: TOP_M - 15, x2: x, y2: H - 10,
+      x1: LEFT_M - 8, y1: y, x2: W - 10, y2: y,
       stroke: color(b.lane), "stroke-width": 1, opacity: 0.12
     }}));
   }});
@@ -355,15 +351,15 @@ def render_commit_graph_html(graph_data: Dict[str, Any], height: int = 500) -> s
     if (c.parent_id && pos[c.parent_id]) {{
       const from = pos[c.id];
       const to = pos[c.parent_id];
-      if (from.x === to.x) {{
+      if (from.y === to.y) {{
         svg.appendChild(svgEl("line", {{
-          x1: from.x, y1: from.y + R, x2: to.x, y2: to.y - R,
+          x1: from.x - R, y1: from.y, x2: to.x + R, y2: to.y,
           stroke: color(c.lane), "stroke-width": 2, opacity: 0.7
         }}));
       }} else {{
-        const midY = (from.y + to.y) / 2;
+        const midX = (from.x + to.x) / 2;
         svg.appendChild(svgEl("path", {{
-          d: `M ${{from.x}} ${{from.y + R}} C ${{from.x}} ${{midY}}, ${{to.x}} ${{midY}}, ${{to.x}} ${{to.y - R}}`,
+          d: `M ${{from.x - R}} ${{from.y}} C ${{midX}} ${{from.y}}, ${{midX}} ${{to.y}}, ${{to.x + R}} ${{to.y}}`,
           stroke: color(c.lane), "stroke-width": 2, fill: "none", opacity: 0.7
         }}));
       }}
@@ -371,9 +367,9 @@ def render_commit_graph_html(graph_data: Dict[str, Any], height: int = 500) -> s
     if (c.merge_parent_id && pos[c.merge_parent_id]) {{
       const from = pos[c.merge_parent_id];
       const to = pos[c.id];
-      const midY = (from.y + to.y) / 2;
+      const midX = (from.x + to.x) / 2;
       svg.appendChild(svgEl("path", {{
-        d: `M ${{from.x}} ${{from.y - R}} C ${{from.x}} ${{midY}}, ${{to.x}} ${{midY}}, ${{to.x}} ${{to.y + R}}`,
+        d: `M ${{from.x + R}} ${{from.y}} C ${{midX}} ${{from.y}}, ${{midX}} ${{to.y}}, ${{to.x - R}} ${{to.y}}`,
         stroke: color(data.commits.find(x => x.id === c.merge_parent_id)?.lane || c.lane),
         "stroke-width": 2, fill: "none", "stroke-dasharray": "6,3", opacity: 0.6
       }}));
@@ -409,32 +405,6 @@ def render_commit_graph_html(graph_data: Dict[str, Any], height: int = 500) -> s
       g.appendChild(svgEl("circle", {{
         cx: cx, cy: cy, r: R, fill: col, stroke: col, "stroke-width": 1
       }}));
-    }}
-
-    // Hash + message label
-    const labelX = LEFT_M + data.lane_count * LANE_W + 20;
-    const labelText = svgEl("text", {{
-      x: labelX, y: cy + 4, fill: "#666", "font-size": "11px", "font-family": "monospace"
-    }});
-    let displayText = c.short_id;
-    if (c.message) displayText += "  " + (c.message.length > 40 ? c.message.slice(0, 40) + "..." : c.message);
-    if (c.is_head && !c.time) displayText = "(uncommitted)";
-    labelText.textContent = displayText;
-    g.appendChild(labelText);
-
-    // Head indicator: branch tag
-    if (c.is_head && c.time) {{
-      const tag = svgEl("rect", {{
-        x: cx + R + 4, y: cy - 8, width: c.branch.length * 7 + 10, height: 16,
-        rx: 4, fill: col, opacity: 0.2
-      }});
-      g.appendChild(tag);
-      const tagText = svgEl("text", {{
-        x: cx + R + 9, y: cy + 4, fill: col, "font-size": "10px", "font-weight": "600",
-        "font-family": "-apple-system, BlinkMacSystemFont, sans-serif"
-      }});
-      tagText.textContent = c.branch;
-      g.appendChild(tagText);
     }}
 
     // Tooltip
