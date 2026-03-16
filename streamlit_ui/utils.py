@@ -221,29 +221,29 @@ def build_commit_graph_data(ds: Any) -> Dict[str, Any]:
                 visited.add(child.commit_id)
                 queue.append(child)
 
-    # Compute DAG depth: longest path from root considering both parent and merge_parent.
-    # Sibling nodes (same parent) at different branches share the same depth,
-    # so cross-lane edges span fewer columns and bezier curves don't cross nodes.
+    # Assign depth by commit_time order so that left-to-right = chronological.
+    # Nodes with commit_time are sorted by time; uncommitted heads go to the end.
+    committed = [n for n in all_nodes.values() if n.commit_time is not None]
+    uncommitted = [n for n in all_nodes.values() if n.commit_time is None]
+    committed.sort(key=lambda n: n.commit_time)
+    uncommitted.sort(key=lambda n: branch_lanes.get(n.branch, 0))
+
     depth = {}
-    def get_depth(node):
-        if node.commit_id in depth:
-            return depth[node.commit_id]
-        d = 0
-        if node.parent and node.parent.commit_id in all_nodes:
-            d = max(d, get_depth(node.parent) + 1)
-        if node.merge_parent and node.merge_parent in all_nodes:
-            d = max(d, get_depth(all_nodes[node.merge_parent]) + 1)
-        depth[node.commit_id] = d
-        return d
+    d = 0
+    prev_time = None
+    for n in committed:
+        if prev_time is not None and n.commit_time != prev_time:
+            d += 1
+        depth[n.commit_id] = d
+        prev_time = n.commit_time
+    # Uncommitted heads each get their own depth at the end
+    if uncommitted:
+        d += 1
+        for n in uncommitted:
+            depth[n.commit_id] = d
 
-    for n in all_nodes.values():
-        get_depth(n)
-
-    # Sort by depth (ascending), then by lane for stable ordering within same depth
     sorted_nodes = sorted(all_nodes.values(),
                           key=lambda n: (depth[n.commit_id], branch_lanes.get(n.branch, 0)))
-
-    # Newest first for display (rightmost = newest)
     topo_order = list(reversed(sorted_nodes))
     max_depth = max(depth.values()) if depth else 0
 
@@ -296,201 +296,231 @@ def render_commit_graph_html(graph_data: Dict[str, Any], height: int = 500) -> s
 <head>
 <style>
   * {{ margin: 0; padding: 0; box-sizing: border-box; }}
-  body {{ font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; background: transparent; }}
-  .graph-container {{ position: relative; overflow: auto; max-height: {height}px; }}
+  body {{ font-family: "SF Mono", "Cascadia Code", "Fira Code", Menlo, monospace; background: #fafbfc; }}
+  .graph-wrap {{ position: relative; overflow-x: auto; overflow-y: auto; max-height: {height}px; padding: 0; }}
   .tooltip {{
-    position: absolute; display: none; background: #1e1e2e; color: #cdd6f4;
-    padding: 10px 14px; border-radius: 8px; font-size: 12px; line-height: 1.5;
-    pointer-events: none; z-index: 100; white-space: pre-line; max-width: 320px;
-    box-shadow: 0 4px 12px rgba(0,0,0,0.3); border: 1px solid #45475a;
+    position: absolute; display: none; background: #24292e; color: #e1e4e8;
+    padding: 8px 12px; border-radius: 6px; font-size: 11.5px; line-height: 1.6;
+    pointer-events: none; z-index: 100; white-space: pre-line; max-width: 300px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.25);
   }}
-  .tooltip .hash {{ color: #89b4fa; font-family: monospace; }}
-  .tooltip .branch-name {{ color: #a6e3a1; font-weight: 600; }}
-  .tooltip .msg {{ color: #f5e0dc; }}
-  .tooltip .meta {{ color: #9399b2; font-size: 11px; }}
+  .tooltip b {{ color: #79b8ff; }}
+  .tooltip .t-branch {{ color: #85e89d; }}
+  .tooltip .t-msg {{ color: #d1d5da; }}
+  .tooltip .t-meta {{ color: #959da5; font-size: 10.5px; }}
+  .tooltip .t-tag {{ display: inline-block; padding: 0 5px; border-radius: 3px; font-size: 10px;
+    margin-left: 4px; font-weight: 600; }}
+  .tooltip .t-merge {{ background: #b3920020; color: #ffdf5d; border: 1px solid #ffdf5d50; }}
+  .tooltip .t-cur   {{ background: #34d05820; color: #85e89d; border: 1px solid #85e89d50; }}
 </style>
 </head>
 <body>
-<div class="graph-container" id="container">
+<div class="graph-wrap" id="wrap">
   <svg id="graph" xmlns="http://www.w3.org/2000/svg"></svg>
-  <div class="tooltip" id="tooltip"></div>
+  <div class="tooltip" id="tip"></div>
 </div>
 <script>
 (function() {{
-  const data = {json_data};
-  const COL_W = 60, LANE_H = 50, R = 8;
-  const LEFT_M = 80, TOP_M = 20;
-  const COLORS = ["#4CAF50","#2196F3","#FF9800","#9C27B0","#F44336","#00BCD4","#795548","#607D8B","#E91E63","#CDDC39"];
-  const N = data.commits ? data.commits.length : 0;
-
-  if (N === 0) {{
-    document.getElementById("container").innerHTML = '<p style="padding:16px;color:#888;">No commits yet.</p>';
+  const D = {json_data};
+  if (!D.commits || !D.commits.length) {{
+    document.getElementById("wrap").innerHTML = '<p style="padding:16px;color:#8b949e;font-size:13px;">No commits yet.</p>';
     return;
   }}
 
+  /* ── Layout constants ── */
+  const COL  = 70;          /* horizontal spacing between depth levels */
+  const LANE = 46;          /* vertical spacing between branch lanes */
+  const R    = 5;           /* node radius */
+  const LM   = 90;          /* left margin for branch labels */
+  const TM   = 22;          /* top margin */
+
+  /* ── Palette: muted, professional tones ── */
+  const PAL = [
+    "#2ea043",  /* green  – main */
+    "#388bfd",  /* blue   */
+    "#d29922",  /* amber  */
+    "#a371f7",  /* purple */
+    "#f85149",  /* red    */
+    "#3fb950",  /* lime   */
+    "#56d4dd",  /* cyan   */
+    "#db6d28",  /* orange */
+    "#e275ad",  /* pink   */
+    "#768390",  /* gray   */
+  ];
+  function clr(lane) {{ return PAL[lane % PAL.length]; }}
+
+  /* ── SVG helpers ── */
+  const NS = "http://www.w3.org/2000/svg";
+  function el(tag, a) {{
+    const e = document.createElementNS(NS, tag);
+    for (const k in a) e.setAttribute(k, a[k]);
+    return e;
+  }}
+  function g() {{ return document.createElementNS(NS, "g"); }}
+
   const svg = document.getElementById("graph");
-  const tooltip = document.getElementById("tooltip");
-  const maxDepth = data.max_depth || 0;
-  const W = LEFT_M + (maxDepth + 1) * COL_W + 30;
-  const H = TOP_M + data.lane_count * LANE_H + 30;
+  const tip = document.getElementById("tip");
+  const maxD = D.max_depth || 0;
+  const W = LM + (maxD + 1) * COL + 40;
+  const H = TM + D.lane_count * LANE + 24;
   svg.setAttribute("width", W);
   svg.setAttribute("height", H);
+  svg.setAttribute("viewBox", `0 0 ${{W}} ${{H}}`);
 
-  // Arrowhead markers per lane color + merge
-  const defs = svgEl("defs", {{}});
-  COLORS.forEach((col, i) => {{
-    const m = svgEl("marker", {{
-      id: "arrow-" + i, viewBox: "0 0 10 6", refX: "10", refY: "3",
-      markerWidth: "8", markerHeight: "6", orient: "auto-start-reverse"
-    }});
-    m.appendChild(svgEl("path", {{ d: "M0,0 L10,3 L0,6 Z", fill: col }}));
-    defs.appendChild(m);
-  }});
-  svg.appendChild(defs);
-
-  // Horizontal layout: x = depth (oldest left, newest right), y = branch lane
+  /* ── Compute node positions ── */
   const pos = {{}};
-  data.commits.forEach(c => {{
-    pos[c.id] = {{ x: LEFT_M + c.depth * COL_W, y: TOP_M + c.lane * LANE_H }};
+  D.commits.forEach(c => {{
+    pos[c.id] = {{ x: LM + c.depth * COL, y: TM + c.lane * LANE }};
   }});
 
-  function color(lane) {{ return COLORS[lane % COLORS.length]; }}
-
-  function svgEl(tag, attrs) {{
-    const el = document.createElementNS("http://www.w3.org/2000/svg", tag);
-    for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
-    return el;
-  }}
-
-  // Branch labels on the left
-  data.branches.forEach(b => {{
-    const y = TOP_M + b.lane * LANE_H;
-    const label = svgEl("text", {{
-      x: LEFT_M - 12, y: y + 4, "text-anchor": "end", fill: color(b.lane),
-      "font-size": b.is_current ? "13px" : "11px",
-      "font-weight": b.is_current ? "700" : "500",
-      "font-family": "-apple-system, BlinkMacSystemFont, sans-serif"
-    }});
-    label.textContent = b.name + (b.is_current ? " *" : "");
-    svg.appendChild(label);
-  }});
-
-  // Horizontal lane guide lines
-  data.branches.forEach(b => {{
-    const y = TOP_M + b.lane * LANE_H;
-    svg.appendChild(svgEl("line", {{
-      x1: LEFT_M - 8, y1: y, x2: W - 10, y2: y,
-      stroke: color(b.lane), "stroke-width": 1, opacity: 0.12
+  /* ── Layer 1: branch lane rails (subtle dashed lines) ── */
+  D.branches.forEach(b => {{
+    const y = TM + b.lane * LANE;
+    svg.appendChild(el("line", {{
+      x1: LM - 4, y1: y, x2: W - 16, y2: y,
+      stroke: clr(b.lane), "stroke-width": "1", "stroke-dasharray": "2,4", opacity: "0.18"
     }}));
   }});
 
-  // Helper: build a smooth bezier path where the arrow (marker-end) tilts along the curve.
-  // The key: offset cp2's y slightly from dst.y so the tangent at the endpoint isn't flat.
-  function edgePath(sx, sy, dx, dy) {{
-    const midX = (sx + dx) / 2;
-    // cp2 y nudged 15% back toward src.y so the end-tangent has a slope
-    const cp2y = dy + (sy - dy) * 0.15;
-    return `M ${{sx + R}} ${{sy}} C ${{midX}} ${{sy}}, ${{dx - R - 12}} ${{cp2y}}, ${{dx - R}} ${{dy}}`;
-  }}
-
-  // Connection lines (directed: parent → child) with smooth bezier
-  data.commits.forEach(c => {{
-    if (c.parent_id && pos[c.parent_id]) {{
-      const src = pos[c.parent_id];
-      const dst = pos[c.id];
-      const laneIdx = c.lane % COLORS.length;
-      if (src.y === dst.y) {{
-        svg.appendChild(svgEl("line", {{
-          x1: src.x + R, y1: src.y, x2: dst.x - R, y2: dst.y,
-          stroke: color(c.lane), "stroke-width": 2, opacity: 0.7,
-          "marker-end": `url(#arrow-${{laneIdx}})`
-        }}));
-      }} else {{
-        svg.appendChild(svgEl("path", {{
-          d: edgePath(src.x, src.y, dst.x, dst.y),
-          stroke: color(c.lane), "stroke-width": 2, fill: "none", opacity: 0.7,
-          "marker-end": `url(#arrow-${{laneIdx}})`
-        }}));
-      }}
-    }}
-    if (c.merge_parent_id && pos[c.merge_parent_id]) {{
-      const src = pos[c.merge_parent_id];
-      const dst = pos[c.id];
-      const mergeLane = data.commits.find(x => x.id === c.merge_parent_id)?.lane || c.lane;
-      const mIdx = mergeLane % COLORS.length;
-      if (src.y === dst.y) {{
-        svg.appendChild(svgEl("line", {{
-          x1: src.x + R, y1: src.y, x2: dst.x - R, y2: dst.y,
-          stroke: color(mergeLane), "stroke-width": 2, opacity: 0.7,
-          "marker-end": `url(#arrow-${{mIdx}})`
-        }}));
-      }} else {{
-        svg.appendChild(svgEl("path", {{
-          d: edgePath(src.x, src.y, dst.x, dst.y),
-          stroke: color(mergeLane),
-          "stroke-width": 2, fill: "none", opacity: 0.7,
-          "marker-end": `url(#arrow-${{mIdx}})`
-        }}));
-      }}
-    }}
+  /* ── Layer 2: branch labels ── */
+  D.branches.forEach(b => {{
+    const y = TM + b.lane * LANE;
+    const isCur = b.is_current;
+    /* Rounded-rect badge */
+    const label = b.name;
+    const charW = isCur ? 7.4 : 6.8;
+    const pw = label.length * charW + 14;
+    const ph = 18;
+    const bx = LM - 8 - pw;
+    const bg = g();
+    bg.appendChild(el("rect", {{
+      x: bx, y: y - ph / 2, width: pw, height: ph, rx: "9", ry: "9",
+      fill: isCur ? clr(b.lane) : "#f6f8fa",
+      stroke: clr(b.lane), "stroke-width": isCur ? "0" : "1",
+      opacity: isCur ? "1" : "0.7"
+    }}));
+    const txt = el("text", {{
+      x: bx + pw / 2, y: y + 4, "text-anchor": "middle",
+      fill: isCur ? "#ffffff" : clr(b.lane),
+      "font-size": "11px", "font-weight": isCur ? "700" : "500",
+      "font-family": "'SF Mono', Menlo, monospace"
+    }});
+    txt.textContent = label;
+    bg.appendChild(txt);
+    svg.appendChild(bg);
   }});
 
-  // Commit nodes
-  data.commits.forEach(c => {{
-    const cx = pos[c.id].x;
-    const cy = pos[c.id].y;
-    const col = color(c.lane);
-    const g = svgEl("g", {{}});
+  /* ── Arrow head helper (two-line style) ── */
+  function arrow(tx, ty, dx, dy, color, op) {{
+    const len = Math.sqrt(dx * dx + dy * dy) || 1;
+    const ux = dx / len, uy = dy / len;
+    const px = -uy, py = ux;
+    const aL = 6, aW = 3;
+    const bx = tx - ux * aL, by = ty - uy * aL;
+    svg.appendChild(el("line", {{
+      x1: tx, y1: ty, x2: bx + px * aW, y2: by + py * aW,
+      stroke: color, "stroke-width": "1.5", opacity: op, "stroke-linecap": "round"
+    }}));
+    svg.appendChild(el("line", {{
+      x1: tx, y1: ty, x2: bx - px * aW, y2: by - py * aW,
+      stroke: color, "stroke-width": "1.5", opacity: op, "stroke-linecap": "round"
+    }}));
+  }}
 
+  /* ── Layer 3: edges ── */
+  const edgeG = g();
+  svg.appendChild(edgeG);
+  D.commits.forEach(c => {{
+    [["parent_id", false], ["merge_parent_id", true]].forEach(([key, isMergeEdge]) => {{
+      const pid = c[key];
+      if (!pid || !pos[pid]) return;
+      const s = pos[pid], d = pos[c.id];
+      const pc = D.commits.find(x => x.id === pid);
+      const lane = pc ? pc.lane : c.lane;
+      const sc = clr(lane);
+      const op = isMergeEdge ? "0.35" : "0.50";
+      const sw = isMergeEdge ? "1.5" : "2";
+      const dash = isMergeEdge ? "4,3" : "none";
+
+      if (s.y === d.y) {{
+        /* Same lane: straight */
+        edgeG.appendChild(el("line", {{
+          x1: s.x, y1: s.y, x2: d.x, y2: d.y,
+          stroke: sc, "stroke-width": sw, opacity: op, "stroke-dasharray": dash
+        }}));
+        arrow(d.x - R - 1, d.y, 1, 0, sc, op);
+      }} else {{
+        /* Cross-lane: cubic bezier for smooth S-curve */
+        const mx = (s.x + d.x) / 2;
+        edgeG.appendChild(el("path", {{
+          d: `M ${{s.x}} ${{s.y}} C ${{mx}} ${{s.y}}, ${{mx}} ${{d.y}}, ${{d.x}} ${{d.y}}`,
+          stroke: sc, "stroke-width": sw, opacity: op, fill: "none",
+          "stroke-dasharray": dash
+        }}));
+        arrow(d.x - R - 1, d.y, 1, 0, sc, op);
+      }}
+    }});
+  }});
+
+  /* ── Layer 4: commit nodes ── */
+  D.commits.forEach(c => {{
+    const cx = pos[c.id].x, cy = pos[c.id].y, cc = clr(c.lane);
+    const ng = g();
+    ng.style.cursor = "pointer";
+
+    /* Current node: static highlight ring */
     if (c.is_current) {{
-      const ring = svgEl("circle", {{
-        cx: cx, cy: cy, r: 14, fill: "none", stroke: col,
-        "stroke-width": 2, opacity: 0.4
-      }});
-      ring.innerHTML = `<animate attributeName="r" values="12;17;12" dur="2s" repeatCount="indefinite"/>
-        <animate attributeName="opacity" values="0.5;0.15;0.5" dur="2s" repeatCount="indefinite"/>`;
-      g.appendChild(ring);
+      ng.appendChild(el("circle", {{
+        cx, cy, r: R + 5, fill: "none", stroke: cc, "stroke-width": "2", opacity: "0.25"
+      }}));
     }}
+
+    /* White outline to separate from edges */
+    ng.appendChild(el("circle", {{ cx, cy, r: R + 1.5, fill: "#fafbfc" }}));
 
     if (c.is_merge) {{
-      g.appendChild(svgEl("circle", {{
-        cx: cx, cy: cy, r: R, fill: col, stroke: "#fff", "stroke-width": 2
-      }}));
-    }} else if (c.is_checkout) {{
-      g.appendChild(svgEl("circle", {{
-        cx: cx, cy: cy, r: R, fill: "#fff", stroke: col, "stroke-width": 2.5
+      /* Merge node: double ring */
+      ng.appendChild(el("circle", {{ cx, cy, r: R, fill: "none", stroke: cc, "stroke-width": "2" }}));
+      ng.appendChild(el("circle", {{ cx, cy, r: R - 2.5, fill: cc }}));
+    }} else if (c.is_head && !c.time) {{
+      /* Uncommitted head: dashed outline */
+      ng.appendChild(el("circle", {{
+        cx, cy, r: R, fill: "#fafbfc", stroke: cc, "stroke-width": "1.5",
+        "stroke-dasharray": "2,2"
       }}));
     }} else {{
-      g.appendChild(svgEl("circle", {{
-        cx: cx, cy: cy, r: R, fill: col, stroke: col, "stroke-width": 1
-      }}));
+      /* Normal commit: solid circle */
+      ng.appendChild(el("circle", {{ cx, cy, r: R, fill: cc }}));
     }}
 
-    // Tooltip
-    g.style.cursor = "default";
-    g.addEventListener("mouseenter", (e) => {{
-      let html = `<span class="hash">${{c.short_id}}</span> <span class="branch-name">${{c.branch}}</span>`;
-      if (c.is_merge) html += ' <span style="color:#f9e2af">[merge]</span>';
-      if (c.is_checkout) html += ' <span style="color:#89dceb">[checkout]</span>';
-      if (c.is_current) html += ' <span style="color:#a6e3a1">[current]</span>';
-      html += `\\n`;
-      if (c.message) html += `<span class="msg">${{c.message}}</span>\\n`;
-      else if (c.is_head && !c.time) html += `<span class="msg">(Uncommitted working copy)</span>\\n`;
-      if (c.author || c.time) html += `<span class="meta">${{c.author}}${{c.time ? " — " + c.time : ""}}</span>`;
-      tooltip.innerHTML = html;
-      tooltip.style.display = "block";
-      const rect = document.getElementById("container").getBoundingClientRect();
-      tooltip.style.left = (e.clientX - rect.left + 15) + "px";
-      tooltip.style.top = (e.clientY - rect.top - 10) + "px";
+    /* Short hash label below node */
+    const label = el("text", {{
+      x: cx, y: cy + R + 12, "text-anchor": "middle", fill: "#8b949e",
+      "font-size": "9px", "font-family": "'SF Mono', Menlo, monospace"
     }});
-    g.addEventListener("mousemove", (e) => {{
-      const rect = document.getElementById("container").getBoundingClientRect();
-      tooltip.style.left = (e.clientX - rect.left + 15) + "px";
-      tooltip.style.top = (e.clientY - rect.top - 10) + "px";
-    }});
-    g.addEventListener("mouseleave", () => {{ tooltip.style.display = "none"; }});
+    label.textContent = c.short_id;
+    ng.appendChild(label);
 
-    svg.appendChild(g);
+    /* Tooltip interaction */
+    ng.addEventListener("mouseenter", () => {{
+      let h = '<b>' + c.short_id + '</b> <span class="t-branch">' + c.branch + '</span>';
+      if (c.is_merge) h += '<span class="t-tag t-merge">merge</span>';
+      if (c.is_current) h += '<span class="t-tag t-cur">HEAD</span>';
+      h += '\\n';
+      if (c.message) h += '<span class="t-msg">' + c.message + '</span>\\n';
+      else if (c.is_head && !c.time) h += '<span class="t-msg" style="opacity:0.6">(uncommitted)</span>\\n';
+      if (c.author || c.time) h += '<span class="t-meta">' + (c.author || '') + (c.time ? ' \u00b7 ' + c.time : '') + '</span>';
+      tip.innerHTML = h;
+      tip.style.display = "block";
+    }});
+    ng.addEventListener("mousemove", (e) => {{
+      const r = document.getElementById("wrap").getBoundingClientRect();
+      tip.style.left = (e.clientX - r.left + 14) + "px";
+      tip.style.top  = (e.clientY - r.top  - 8)  + "px";
+    }});
+    ng.addEventListener("mouseleave", () => {{ tip.style.display = "none"; }});
+
+    svg.appendChild(ng);
   }});
 }})();
 </script>
