@@ -468,11 +468,15 @@ def render_commit_graph_html(graph_data: Dict[str, Any], height: int = 500) -> s
     const ng = g();
     ng.style.cursor = "pointer";
 
-    /* Current node: static highlight ring */
+    /* Current node: animated pulsing ring */
     if (c.is_current) {{
-      ng.appendChild(el("circle", {{
-        cx, cy, r: R + 5, fill: "none", stroke: cc, "stroke-width": "2", opacity: "0.25"
-      }}));
+      const pulse = el("circle", {{
+        cx, cy, r: R + 4, fill: "none", stroke: cc, "stroke-width": "2", opacity: "0.5"
+      }});
+      pulse.innerHTML =
+        '<animate attributeName="r" values="' + (R + 4) + ';' + (R + 10) + ';' + (R + 4) + '" dur="2s" repeatCount="indefinite"/>' +
+        '<animate attributeName="opacity" values="0.5;0.08;0.5" dur="2s" repeatCount="indefinite"/>';
+      ng.appendChild(pulse);
     }}
 
     /* White outline to separate from edges */
