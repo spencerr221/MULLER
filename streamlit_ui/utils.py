@@ -204,25 +204,48 @@ def build_commit_graph_data(ds: Any) -> Dict[str, Any]:
     sorted_branches = sorted(all_branch_names, key=_branch_sort_key)
     branch_lanes = {name: i for i, name in enumerate(sorted_branches)}
 
-    # BFS topological order from FIRST_COMMIT_ID
+    # BFS to collect all reachable nodes
     root = commit_node_map.get(FIRST_COMMIT_ID)
     if not root:
         return {"commits": [], "branches": [], "lane_count": 0}
 
-    topo_order = []
+    all_nodes = {}
     visited = set()
     queue = deque([root])
     visited.add(root.commit_id)
     while queue:
         node = queue.popleft()
-        topo_order.append(node)
+        all_nodes[node.commit_id] = node
         for child in node.children:
             if child.commit_id not in visited:
                 visited.add(child.commit_id)
                 queue.append(child)
 
-    # Reverse so newest first
-    topo_order.reverse()
+    # Compute DAG depth: longest path from root considering both parent and merge_parent.
+    # Sibling nodes (same parent) at different branches share the same depth,
+    # so cross-lane edges span fewer columns and bezier curves don't cross nodes.
+    depth = {}
+    def get_depth(node):
+        if node.commit_id in depth:
+            return depth[node.commit_id]
+        d = 0
+        if node.parent and node.parent.commit_id in all_nodes:
+            d = max(d, get_depth(node.parent) + 1)
+        if node.merge_parent and node.merge_parent in all_nodes:
+            d = max(d, get_depth(all_nodes[node.merge_parent]) + 1)
+        depth[node.commit_id] = d
+        return d
+
+    for n in all_nodes.values():
+        get_depth(n)
+
+    # Sort by depth (ascending), then by lane for stable ordering within same depth
+    sorted_nodes = sorted(all_nodes.values(),
+                          key=lambda n: (depth[n.commit_id], branch_lanes.get(n.branch, 0)))
+
+    # Newest first for display (rightmost = newest)
+    topo_order = list(reversed(sorted_nodes))
+    max_depth = max(depth.values()) if depth else 0
 
     # Build commit records
     commits = []
@@ -233,6 +256,7 @@ def build_commit_graph_data(ds: Any) -> Dict[str, Any]:
             "short_id": node.commit_id[:8],
             "branch": node.branch,
             "lane": lane,
+            "depth": depth[node.commit_id],
             "message": node.commit_message or "",
             "time": str(node.commit_time)[:-7] if node.commit_time else "",
             "author": node.commit_user_name or "",
@@ -258,6 +282,7 @@ def build_commit_graph_data(ds: Any) -> Dict[str, Any]:
         "commits": commits,
         "branches": branches_list,
         "lane_count": len(branch_lanes),
+        "max_depth": max_depth,
     }
 
 
@@ -305,15 +330,28 @@ def render_commit_graph_html(graph_data: Dict[str, Any], height: int = 500) -> s
 
   const svg = document.getElementById("graph");
   const tooltip = document.getElementById("tooltip");
-  const W = LEFT_M + N * COL_W + 30;
+  const maxDepth = data.max_depth || 0;
+  const W = LEFT_M + (maxDepth + 1) * COL_W + 30;
   const H = TOP_M + data.lane_count * LANE_H + 30;
   svg.setAttribute("width", W);
   svg.setAttribute("height", H);
 
-  // Horizontal layout: x = time axis (oldest left, newest right), y = branch lane
+  // Arrowhead markers per lane color + merge
+  const defs = svgEl("defs", {{}});
+  COLORS.forEach((col, i) => {{
+    const m = svgEl("marker", {{
+      id: "arrow-" + i, viewBox: "0 0 10 6", refX: "10", refY: "3",
+      markerWidth: "8", markerHeight: "6", orient: "auto-start-reverse"
+    }});
+    m.appendChild(svgEl("path", {{ d: "M0,0 L10,3 L0,6 Z", fill: col }}));
+    defs.appendChild(m);
+  }});
+  svg.appendChild(defs);
+
+  // Horizontal layout: x = depth (oldest left, newest right), y = branch lane
   const pos = {{}};
-  data.commits.forEach((c, i) => {{
-    pos[c.id] = {{ x: LEFT_M + (N - 1 - i) * COL_W, y: TOP_M + c.lane * LANE_H }};
+  data.commits.forEach(c => {{
+    pos[c.id] = {{ x: LEFT_M + c.depth * COL_W, y: TOP_M + c.lane * LANE_H }};
   }});
 
   function color(lane) {{ return COLORS[lane % COLORS.length]; }}
@@ -346,33 +384,54 @@ def render_commit_graph_html(graph_data: Dict[str, Any], height: int = 500) -> s
     }}));
   }});
 
-  // Connection lines
+  // Helper: build a smooth bezier path where the arrow (marker-end) tilts along the curve.
+  // The key: offset cp2's y slightly from dst.y so the tangent at the endpoint isn't flat.
+  function edgePath(sx, sy, dx, dy) {{
+    const midX = (sx + dx) / 2;
+    // cp2 y nudged 15% back toward src.y so the end-tangent has a slope
+    const cp2y = dy + (sy - dy) * 0.15;
+    return `M ${{sx + R}} ${{sy}} C ${{midX}} ${{sy}}, ${{dx - R - 12}} ${{cp2y}}, ${{dx - R}} ${{dy}}`;
+  }}
+
+  // Connection lines (directed: parent → child) with smooth bezier
   data.commits.forEach(c => {{
     if (c.parent_id && pos[c.parent_id]) {{
-      const from = pos[c.id];
-      const to = pos[c.parent_id];
-      if (from.y === to.y) {{
+      const src = pos[c.parent_id];
+      const dst = pos[c.id];
+      const laneIdx = c.lane % COLORS.length;
+      if (src.y === dst.y) {{
         svg.appendChild(svgEl("line", {{
-          x1: from.x - R, y1: from.y, x2: to.x + R, y2: to.y,
-          stroke: color(c.lane), "stroke-width": 2, opacity: 0.7
+          x1: src.x + R, y1: src.y, x2: dst.x - R, y2: dst.y,
+          stroke: color(c.lane), "stroke-width": 2, opacity: 0.7,
+          "marker-end": `url(#arrow-${{laneIdx}})`
         }}));
       }} else {{
-        const midX = (from.x + to.x) / 2;
         svg.appendChild(svgEl("path", {{
-          d: `M ${{from.x - R}} ${{from.y}} C ${{midX}} ${{from.y}}, ${{midX}} ${{to.y}}, ${{to.x + R}} ${{to.y}}`,
-          stroke: color(c.lane), "stroke-width": 2, fill: "none", opacity: 0.7
+          d: edgePath(src.x, src.y, dst.x, dst.y),
+          stroke: color(c.lane), "stroke-width": 2, fill: "none", opacity: 0.7,
+          "marker-end": `url(#arrow-${{laneIdx}})`
         }}));
       }}
     }}
     if (c.merge_parent_id && pos[c.merge_parent_id]) {{
-      const from = pos[c.merge_parent_id];
-      const to = pos[c.id];
-      const midX = (from.x + to.x) / 2;
-      svg.appendChild(svgEl("path", {{
-        d: `M ${{from.x + R}} ${{from.y}} C ${{midX}} ${{from.y}}, ${{midX}} ${{to.y}}, ${{to.x - R}} ${{to.y}}`,
-        stroke: color(data.commits.find(x => x.id === c.merge_parent_id)?.lane || c.lane),
-        "stroke-width": 2, fill: "none", "stroke-dasharray": "6,3", opacity: 0.6
-      }}));
+      const src = pos[c.merge_parent_id];
+      const dst = pos[c.id];
+      const mergeLane = data.commits.find(x => x.id === c.merge_parent_id)?.lane || c.lane;
+      const mIdx = mergeLane % COLORS.length;
+      if (src.y === dst.y) {{
+        svg.appendChild(svgEl("line", {{
+          x1: src.x + R, y1: src.y, x2: dst.x - R, y2: dst.y,
+          stroke: color(mergeLane), "stroke-width": 2, opacity: 0.7,
+          "marker-end": `url(#arrow-${{mIdx}})`
+        }}));
+      }} else {{
+        svg.appendChild(svgEl("path", {{
+          d: edgePath(src.x, src.y, dst.x, dst.y),
+          stroke: color(mergeLane),
+          "stroke-width": 2, fill: "none", opacity: 0.7,
+          "marker-end": `url(#arrow-${{mIdx}})`
+        }}));
+      }}
     }}
   }});
 
