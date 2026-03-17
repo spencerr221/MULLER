@@ -573,9 +573,9 @@ elif page == "🌿 Version Control":
             # Visual commit graph
             try:
                 _graph_data = build_commit_graph_data(ds)
-                _graph_h = 22 + _graph_data["lane_count"] * 46 + 36
+                _graph_h = 22 + _graph_data["lane_count"] * 46 + 20
                 _graph_html = render_commit_graph_html(_graph_data, height=_graph_h)
-                components.html(_graph_html, height=_graph_h + 20, scrolling=True)
+                components.html(_graph_html, height=_graph_h, scrolling=False)
             except Exception:
                 # Fallback to markdown
                 st.markdown("**Current branches:**")
