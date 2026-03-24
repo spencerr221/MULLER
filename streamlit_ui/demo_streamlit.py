@@ -308,12 +308,16 @@ if page == "📊 Dataset Management":
                             except ValueError:
                                 sample_data[tname] = [val]
 
+                add_commit_msg = st.text_input(
+                    "Commit Message", value="Add sample via Streamlit UI",
+                    key="add_sample_commit_msg")
                 if st.button("Add Sample", type="primary"):
                     filtered = {k: v for k, v in sample_data.items() if v is not None}
                     if not filtered:
                         st.error("Please fill in at least one field.")
                     else:
-                        err = add_samples(ds, filtered, auto_commit=True)
+                        err = add_samples(ds, filtered, auto_commit=True,
+                                          commit_message=add_commit_msg)
                         if err:
                             st.error(err)
                         else:
@@ -354,6 +358,9 @@ if page == "📊 Dataset Management":
                             if mode != "skip":
                                 path_columns[col] = mode
 
+                    csv_commit_msg = st.text_input(
+                        "Commit Message", value="Import CSV data via Streamlit UI",
+                        key="csv_commit_msg")
                     if st.button("Import CSV Data"):
                         if not matched:
                             st.error(f"CSV columns must match tensors: {tensor_names}")
@@ -371,7 +378,7 @@ if page == "📊 Dataset Management":
                                     path_columns=path_columns if path_columns else None,
                                     workers=0,
                                 )
-                                commit_dataset(ds, message="Import CSV data via Streamlit UI")
+                                commit_dataset(ds, message=csv_commit_msg)
                                 st.success(f"Imported {len(df_up)} samples.")
                                 st.rerun()
                             except Exception as e:
@@ -386,12 +393,15 @@ if page == "📊 Dataset Management":
                     st.info("No samples to delete.")
                 else:
                     del_idx = st.number_input("Sample Index", min_value=0, max_value=max(n - 1, 0), value=0)
+                    del_commit_msg = st.text_input(
+                        "Commit Message", value="Delete sample via Streamlit UI",
+                        key="del_commit_msg")
                     if st.button("Delete", type="secondary"):
                         err = delete_sample(ds, del_idx)
                         if err:
                             st.error(err)
                         else:
-                            commit_dataset(ds, message=f"Deleted sample {del_idx}")
+                            commit_dataset(ds, message=del_commit_msg)
                             st.success(f"Deleted sample {del_idx}")
                             st.rerun()
 
@@ -403,6 +413,9 @@ if page == "📊 Dataset Management":
                     upd_idx = st.number_input("Sample Index to Update", min_value=0, max_value=max(n - 1, 0), value=0, key="upd_idx")
                     upd_tensor = st.selectbox("Tensor", list(ds.tensors.keys()), key="upd_tensor")
                     upd_val = st.text_input("New Value", key="upd_val")
+                    upd_commit_msg = st.text_input(
+                        "Commit Message", value="Update sample via Streamlit UI",
+                        key="upd_commit_msg")
                     if st.button("Update", type="secondary"):
                         try:
                             parsed = int(upd_val)
@@ -415,7 +428,7 @@ if page == "📊 Dataset Management":
                         if err:
                             st.error(err)
                         else:
-                            commit_dataset(ds, message=f"Updated {upd_tensor}[{upd_idx}]")
+                            commit_dataset(ds, message=upd_commit_msg)
                             st.success(f"Updated {upd_tensor}[{upd_idx}]")
                             st.rerun()
 
@@ -639,26 +652,57 @@ elif page == "🌿 Version Control":
                     if err:
                         st.error(err)
                     else:
-                        if result["columns"]:
-                            st.warning(f"Conflicts in: {', '.join(result['columns'])}")
+                        # Check tensor-level conflicts (renames/deletes)
+                        has_tensor_conflicts = bool(result["columns"])
+
+                        # Check sample-level conflicts across ALL common tensors
+                        tensors_with_sample_conflicts = []
+                        for col_name, cdata in result.get("records", {}).items():
+                            has_append = bool(cdata.get("app_ori_idx") and cdata.get("app_tar_idx"))
+                            has_update = False
+                            if cdata.get("update_values"):
+                                uv = cdata["update_values"]
+                                has_update = bool(uv.get("update_ori") or uv.get("update_tar"))
+                            has_delete = bool(cdata.get("del_ori_idx") or cdata.get("del_tar_idx"))
+                            if has_append or has_update or has_delete:
+                                tensors_with_sample_conflicts.append(col_name)
+
+                        if has_tensor_conflicts or tensors_with_sample_conflicts:
+                            conflict_summary = []
+                            if has_tensor_conflicts:
+                                conflict_summary.append(f"Tensor conflicts: {', '.join(result['columns'])}")
+                            if tensors_with_sample_conflicts:
+                                conflict_summary.append(f"Sample conflicts in: {', '.join(tensors_with_sample_conflicts)}")
+                            st.warning(" | ".join(conflict_summary))
+
+                            # Show details for all tensors that have any conflict
+                            all_conflict_tensors = set(tensors_with_sample_conflicts)
+                            if has_tensor_conflicts:
+                                all_conflict_tensors.update(result["columns"])
 
                             with st.expander("Conflict Details", expanded=True):
-                                for col_name in result["columns"]:
+                                for col_name in sorted(all_conflict_tensors):
                                     st.markdown(f"#### `{col_name}`")
                                     cdata = result["records"].get(col_name, {})
 
-                                    # Append conflicts
-                                    if cdata.get("app_ori_idx"):
-                                        st.markdown("**Append conflicts:**")
+                                    # Append conflicts (both branches appended)
+                                    if cdata.get("app_ori_idx") and cdata.get("app_tar_idx"):
+                                        st.markdown("**Append conflicts (both branches added samples):**")
                                         rows = []
                                         ori_vals = cdata.get("app_ori_values", [])
                                         tar_vals = cdata.get("app_tar_values", [])
                                         for j, idx in enumerate(cdata["app_ori_idx"]):
-                                            rows.append({"Index": idx, "Current (ours)": str(ori_vals[j]) if j < len(ori_vals) else "—"})
-                                        for j, idx in enumerate(cdata.get("app_tar_idx", [])):
-                                            rows.append({"Index": idx, "Source (theirs)": str(tar_vals[j]) if j < len(tar_vals) else "—"})
+                                            rows.append({"Side": "Current (ours)", "Index": idx,
+                                                         "Value": str(ori_vals[j]) if j < len(ori_vals) else "—"})
+                                        for j, idx in enumerate(cdata["app_tar_idx"]):
+                                            rows.append({"Side": "Source (theirs)", "Index": idx,
+                                                         "Value": str(tar_vals[j]) if j < len(tar_vals) else "—"})
                                         if rows:
                                             st.dataframe(pd.DataFrame(rows), width="stretch")
+                                    elif cdata.get("app_ori_idx"):
+                                        st.markdown(f"**Appended in current only:** {len(cdata['app_ori_idx'])} samples")
+                                    elif cdata.get("app_tar_idx"):
+                                        st.markdown(f"**Appended in source only:** {len(cdata['app_tar_idx'])} samples")
 
                                     # Update conflicts
                                     if cdata.get("update_values"):
