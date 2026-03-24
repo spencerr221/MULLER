@@ -710,8 +710,7 @@ def finalize_merge(dataset, nodes: Dict[str, CommitNode]):
     original_node = nodes["original"]
     target_node = nodes["target"]
     original_node.merge_from(target_node)
-    target_id = target_node.commit_id
-    commit(dataset, f"Merge {target_id} into {dataset.branch}")
+    commit(dataset, f"Merge {target_node.branch} into {dataset.branch}")
 
 
 def get_node_tensors(dataset, target_id: str) -> Set[str]:

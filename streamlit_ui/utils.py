@@ -47,14 +47,15 @@ def create_tensors(ds: Any, schema: Dict[str, Dict[str, Any]]) -> Optional[str]:
         return f"Failed to create tensors: {e}"
 
 
-def add_samples(ds: Any, data: Dict[str, List], auto_commit: bool = True) -> Optional[str]:
+def add_samples(ds: Any, data: Dict[str, List], auto_commit: bool = True,
+                 commit_message: str = "Add samples via Streamlit UI") -> Optional[str]:
     """Add samples to dataset using per-tensor extend."""
     try:
         with ds:
             for tensor_name, values in data.items():
                 ds[tensor_name].extend(values)
         if auto_commit:
-            ds.commit(message="Add samples via Streamlit UI")
+            ds.commit(message=commit_message)
         return None
     except Exception as e:
         return f"Failed to add samples: {e}"

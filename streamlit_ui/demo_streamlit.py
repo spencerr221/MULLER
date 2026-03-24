@@ -308,12 +308,16 @@ if page == "📊 Dataset Management":
                             except ValueError:
                                 sample_data[tname] = [val]
 
+                add_commit_msg = st.text_input(
+                    "Commit Message", value="Add sample via Streamlit UI",
+                    key="add_sample_commit_msg")
                 if st.button("Add Sample", type="primary"):
                     filtered = {k: v for k, v in sample_data.items() if v is not None}
                     if not filtered:
                         st.error("Please fill in at least one field.")
                     else:
-                        err = add_samples(ds, filtered, auto_commit=True)
+                        err = add_samples(ds, filtered, auto_commit=True,
+                                          commit_message=add_commit_msg)
                         if err:
                             st.error(err)
                         else:
@@ -354,6 +358,9 @@ if page == "📊 Dataset Management":
                             if mode != "skip":
                                 path_columns[col] = mode
 
+                    csv_commit_msg = st.text_input(
+                        "Commit Message", value="Import CSV data via Streamlit UI",
+                        key="csv_commit_msg")
                     if st.button("Import CSV Data"):
                         if not matched:
                             st.error(f"CSV columns must match tensors: {tensor_names}")
@@ -371,7 +378,7 @@ if page == "📊 Dataset Management":
                                     path_columns=path_columns if path_columns else None,
                                     workers=0,
                                 )
-                                commit_dataset(ds, message="Import CSV data via Streamlit UI")
+                                commit_dataset(ds, message=csv_commit_msg)
                                 st.success(f"Imported {len(df_up)} samples.")
                                 st.rerun()
                             except Exception as e:
@@ -386,12 +393,15 @@ if page == "📊 Dataset Management":
                     st.info("No samples to delete.")
                 else:
                     del_idx = st.number_input("Sample Index", min_value=0, max_value=max(n - 1, 0), value=0)
+                    del_commit_msg = st.text_input(
+                        "Commit Message", value="Delete sample via Streamlit UI",
+                        key="del_commit_msg")
                     if st.button("Delete", type="secondary"):
                         err = delete_sample(ds, del_idx)
                         if err:
                             st.error(err)
                         else:
-                            commit_dataset(ds, message=f"Deleted sample {del_idx}")
+                            commit_dataset(ds, message=del_commit_msg)
                             st.success(f"Deleted sample {del_idx}")
                             st.rerun()
 
@@ -403,6 +413,9 @@ if page == "📊 Dataset Management":
                     upd_idx = st.number_input("Sample Index to Update", min_value=0, max_value=max(n - 1, 0), value=0, key="upd_idx")
                     upd_tensor = st.selectbox("Tensor", list(ds.tensors.keys()), key="upd_tensor")
                     upd_val = st.text_input("New Value", key="upd_val")
+                    upd_commit_msg = st.text_input(
+                        "Commit Message", value="Update sample via Streamlit UI",
+                        key="upd_commit_msg")
                     if st.button("Update", type="secondary"):
                         try:
                             parsed = int(upd_val)
@@ -415,7 +428,7 @@ if page == "📊 Dataset Management":
                         if err:
                             st.error(err)
                         else:
-                            commit_dataset(ds, message=f"Updated {upd_tensor}[{upd_idx}]")
+                            commit_dataset(ds, message=upd_commit_msg)
                             st.success(f"Updated {upd_tensor}[{upd_idx}]")
                             st.rerun()
 
