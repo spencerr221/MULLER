@@ -47,15 +47,19 @@ def create_tensors(ds: Any, schema: Dict[str, Dict[str, Any]]) -> Optional[str]:
         return f"Failed to create tensors: {e}"
 
 
-def add_samples(ds: Any, data: Dict[str, List], auto_commit: bool = True,
-                 commit_message: str = "Add samples via Streamlit UI") -> Optional[str]:
+def add_samples(
+    ds: Any,
+    data: Dict[str, List],
+    auto_commit: bool = True,
+    commit_message: Optional[str] = None,
+) -> Optional[str]:
     """Add samples to dataset using per-tensor extend."""
     try:
         with ds:
             for tensor_name, values in data.items():
                 ds[tensor_name].extend(values)
         if auto_commit:
-            ds.commit(message=commit_message)
+            ds.commit(message=commit_message or "Add samples via Streamlit UI")
         return None
     except Exception as e:
         return f"Failed to add samples: {e}"
@@ -361,18 +365,64 @@ def render_commit_graph_html(graph_data: Dict[str, Any], height: int = 500) -> s
 
   const svg = document.getElementById("graph");
   const tip = document.getElementById("tip");
-  const maxD = D.max_depth || 0;
-  const W = LM + (maxD + 1) * COL + 40;
-  const H = TM + D.lane_count * LANE + 24;
-  svg.setAttribute("width", W);
-  svg.setAttribute("height", H);
-  svg.setAttribute("viewBox", `0 0 ${{W}} ${{H}}`);
 
   /* ── Compute node positions ── */
   const pos = {{}};
   D.commits.forEach(c => {{
     pos[c.id] = {{ x: LM + c.depth * COL, y: TM + c.lane * LANE }};
   }});
+
+  /* ── Nudge nodes that sit on cross-lane bezier edges ──
+   * For bezier M sx,sy C mx,sy mx,dy dx,dy the y-parametric is:
+   *   y(t) = sy·(1-t)²·(1+2t) + dy·t²·(3-2t)
+   * We solve for t at each intermediate lane's y via bisection,
+   * then check if any unrelated node's x is within OV_THRESH of the
+   * curve's x(t). If so, shift that node right by NUDGE_PX.
+   */
+  const NUDGE_PX = Math.round(COL * 0.22);
+  const OV_THRESH = R + 4;
+  function _solveT(sy, dy, tgt) {{
+    let lo = 0, hi = 1;
+    for (let i = 0; i < 25; i++) {{
+      const t = (lo + hi) / 2, u = 1 - t;
+      const yt = sy * u * u * (1 + 2 * t) + dy * t * t * (3 - 2 * t);
+      if ((dy > sy) === (yt < tgt)) lo = t; else hi = t;
+    }}
+    return (lo + hi) / 2;
+  }}
+  function _bezX(t, sx, mx, dx) {{
+    const u = 1 - t;
+    return u * u * u * sx + 3 * u * t * mx + t * t * t * dx;
+  }}
+  const nudged = new Set();
+  D.commits.forEach(c => {{
+    ["parent_id", "merge_parent_id"].forEach(key => {{
+      const pid = c[key];
+      if (!pid || !pos[pid]) return;
+      const s = pos[pid], d = pos[c.id];
+      if (s.y === d.y) return;
+      const emx = (s.x + d.x) / 2;
+      const minY = Math.min(s.y, d.y), maxY = Math.max(s.y, d.y);
+      D.commits.forEach(o => {{
+        if (o.id === pid || o.id === c.id || nudged.has(o.id)) return;
+        const ny = pos[o.id].y;
+        if (ny <= minY || ny >= maxY) return;
+        const t = _solveT(s.y, d.y, ny);
+        const bx = _bezX(t, s.x, emx, d.x);
+        if (Math.abs(pos[o.id].x - bx) < OV_THRESH) {{
+          pos[o.id].x += NUDGE_PX;
+          nudged.add(o.id);
+        }}
+      }});
+    }});
+  }});
+
+  const maxD = D.max_depth || 0;
+  const W = LM + (maxD + 1) * COL + 40 + (nudged.size > 0 ? NUDGE_PX : 0);
+  const H = TM + D.lane_count * LANE + 24;
+  svg.setAttribute("width", W);
+  svg.setAttribute("height", H);
+  svg.setAttribute("viewBox", `0 0 ${{W}} ${{H}}`);
 
   /* ── Layer 1: branch lane rails (subtle dashed lines) ── */
   D.branches.forEach(b => {{
