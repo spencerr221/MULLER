@@ -2,7 +2,7 @@
     <img src="docs/figures/logo.png" width="500">
 </div>
 
-<h1 align="center"> MULLER: a Multimodal Data Lake Format <br> for Collaborative AI Data Workflows</h1>
+<h1 align="center"> MULLER: A Multimodal Data Lake Format <br> for Collaborative AI Data Workflows</h1>
 
 
 ## Overview
