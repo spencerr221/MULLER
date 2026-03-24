@@ -652,26 +652,57 @@ elif page == "🌿 Version Control":
                     if err:
                         st.error(err)
                     else:
-                        if result["columns"]:
-                            st.warning(f"Conflicts in: {', '.join(result['columns'])}")
+                        # Check tensor-level conflicts (renames/deletes)
+                        has_tensor_conflicts = bool(result["columns"])
+
+                        # Check sample-level conflicts across ALL common tensors
+                        tensors_with_sample_conflicts = []
+                        for col_name, cdata in result.get("records", {}).items():
+                            has_append = bool(cdata.get("app_ori_idx") and cdata.get("app_tar_idx"))
+                            has_update = False
+                            if cdata.get("update_values"):
+                                uv = cdata["update_values"]
+                                has_update = bool(uv.get("update_ori") or uv.get("update_tar"))
+                            has_delete = bool(cdata.get("del_ori_idx") or cdata.get("del_tar_idx"))
+                            if has_append or has_update or has_delete:
+                                tensors_with_sample_conflicts.append(col_name)
+
+                        if has_tensor_conflicts or tensors_with_sample_conflicts:
+                            conflict_summary = []
+                            if has_tensor_conflicts:
+                                conflict_summary.append(f"Tensor conflicts: {', '.join(result['columns'])}")
+                            if tensors_with_sample_conflicts:
+                                conflict_summary.append(f"Sample conflicts in: {', '.join(tensors_with_sample_conflicts)}")
+                            st.warning(" | ".join(conflict_summary))
+
+                            # Show details for all tensors that have any conflict
+                            all_conflict_tensors = set(tensors_with_sample_conflicts)
+                            if has_tensor_conflicts:
+                                all_conflict_tensors.update(result["columns"])
 
                             with st.expander("Conflict Details", expanded=True):
-                                for col_name in result["columns"]:
+                                for col_name in sorted(all_conflict_tensors):
                                     st.markdown(f"#### `{col_name}`")
                                     cdata = result["records"].get(col_name, {})
 
-                                    # Append conflicts
-                                    if cdata.get("app_ori_idx"):
-                                        st.markdown("**Append conflicts:**")
+                                    # Append conflicts (both branches appended)
+                                    if cdata.get("app_ori_idx") and cdata.get("app_tar_idx"):
+                                        st.markdown("**Append conflicts (both branches added samples):**")
                                         rows = []
                                         ori_vals = cdata.get("app_ori_values", [])
                                         tar_vals = cdata.get("app_tar_values", [])
                                         for j, idx in enumerate(cdata["app_ori_idx"]):
-                                            rows.append({"Index": idx, "Current (ours)": str(ori_vals[j]) if j < len(ori_vals) else "—"})
-                                        for j, idx in enumerate(cdata.get("app_tar_idx", [])):
-                                            rows.append({"Index": idx, "Source (theirs)": str(tar_vals[j]) if j < len(tar_vals) else "—"})
+                                            rows.append({"Side": "Current (ours)", "Index": idx,
+                                                         "Value": str(ori_vals[j]) if j < len(ori_vals) else "—"})
+                                        for j, idx in enumerate(cdata["app_tar_idx"]):
+                                            rows.append({"Side": "Source (theirs)", "Index": idx,
+                                                         "Value": str(tar_vals[j]) if j < len(tar_vals) else "—"})
                                         if rows:
                                             st.dataframe(pd.DataFrame(rows), width="stretch")
+                                    elif cdata.get("app_ori_idx"):
+                                        st.markdown(f"**Appended in current only:** {len(cdata['app_ori_idx'])} samples")
+                                    elif cdata.get("app_tar_idx"):
+                                        st.markdown(f"**Appended in source only:** {len(cdata['app_tar_idx'])} samples")
 
                                     # Update conflicts
                                     if cdata.get("update_values"):

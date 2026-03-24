@@ -753,7 +753,7 @@ def get_updates_commit_ids_for_node(
             # of the merge_parent of the current node.
             merge_parent_node = dataset.version_state["commit_node_map"][current_node.merge_parent]
             changes = get_updates_commit_ids_for_node(
-                dataset, tensor_key, merge_parent_node, lca_node
+                dataset, tensor_name, merge_parent_node, lca_node
             )
             for idx in changes:
                 updated_commit_map[idx].extend(changes[idx])
