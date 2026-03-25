@@ -37,6 +37,10 @@ class HubJsonEncoder(json.JSONEncoder):
                 "_hub_custom_type": "bytes",
                 "data": base64.b64encode(obj).decode(),
             }
+        # numpy scalars: returning obj would make json re-enter default() on the same
+        # instance and raise "Circular reference detected"
+        elif isinstance(obj, (np.integer, np.floating, np.bool_)):
+            return obj.item()
 
         return obj
 

@@ -25,6 +25,7 @@ class DatasetMeta(Meta):
         self.hidden_tensors = []
         self.info = {}
         self.dataset_creator = "public"
+        self.statistics = None
 
     def __getstate__(self) -> Dict[str, Any]:
         d = super().__getstate__()
@@ -33,13 +34,14 @@ class DatasetMeta(Meta):
         d["hidden_tensors"] = self.hidden_tensors.copy()
         d["info"] = self.info.copy()
         d["dataset_creator"] = self.dataset_creator
+        d["statistics"] = self.statistics
         return d
 
     def __setstate__(self, d):
-        # Remove deprecated fields for backward compatibility
-        d.pop("statistics", None)
+        statistics = d.pop("statistics", None)
         d.pop("default_index", None)
         self.__dict__.update(d)
+        self.statistics = statistics
 
     @property
     def visible_tensors(self):

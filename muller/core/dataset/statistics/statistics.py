@@ -25,8 +25,7 @@ def show_statistics(dataset):
     Args:
         dataset: The dataset to get statistics for.
     """
-    from muller.core.dataset.statistics.io import load_statistics, save_statistics
-
+    from muller.core.version_control.functions import load_statistics, save_statistics
     if dataset.has_head_changes:
         warnings.warn(
             "There are uncommitted changes, showing statistics from last committed version, try again after commit."
@@ -51,9 +50,9 @@ def get_column_stats_numpy(data):
     column_statistics = {}
     histogram = get_histogram(data)
     length = len(data)
-    nan_count = np.count_nonzero(np.isnan(data))
+    nan_count = int(np.count_nonzero(np.isnan(data)))
     column_statistics['nan_count'] = nan_count
-    column_statistics['nan_proportion'] = nan_count / length
+    column_statistics['nan_proportion'] = float(nan_count / length)
     column_statistics['min'] = int(np.min(data))
     column_statistics['max'] = int(np.max(data))
     column_statistics['mean'] = float(round(np.mean(data), 5))
